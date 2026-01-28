@@ -38,6 +38,7 @@ namespace swiftscript {
         if (val.is_object() && val.ref_type() == RefType::Strong) {
             RC::retain(val.as_object());
             stats_.retain_count++;
+            record_rc_operation();
         }
 
         stack_.push_back(val);
@@ -55,6 +56,7 @@ namespace swiftscript {
         if (val.is_object() && val.ref_type() == RefType::Strong) {
             RC::release(this, val.as_object());
             stats_.release_count++;
+            record_rc_operation();
         }
 
         return val;
@@ -73,6 +75,7 @@ namespace swiftscript {
         if (it != globals_.end()) {
             if (it->second.is_object() && it->second.ref_type() == RefType::Strong) {
                 RC::release(this, it->second.as_object());
+                record_rc_operation();
             }
         }
 
@@ -80,6 +83,7 @@ namespace swiftscript {
         if (val.is_object() && val.ref_type() == RefType::Strong) {
             RC::retain(val.as_object());
             stats_.retain_count++;
+            record_rc_operation();
         }
 
         globals_[name] = val;
@@ -128,10 +132,15 @@ namespace swiftscript {
     }
 
     void VM::collect_if_needed() {
-        if (++rc_operations_ >= config_.deferred_cleanup_threshold) {
+        if (rc_operations_ >= config_.deferred_cleanup_threshold) {
             run_cleanup();
             rc_operations_ = 0;
         }
+    }
+
+    void VM::record_rc_operation() {
+        ++rc_operations_;
+        collect_if_needed();
     }
 
     void VM::print_stats() const {

@@ -68,14 +68,20 @@ void RC::weak_retain(Object* obj, Value* weak_slot) {
 void RC::weak_release(Object* obj, Value* weak_slot) {
     if (!obj) return;
     
-    int32_t old_count = obj->rc.weak_count.fetch_sub(1, std::memory_order_relaxed);
+    int32_t old_count = obj->rc.weak_count.load(std::memory_order_relaxed);
+    int32_t new_count = obj->rc.weak_count.fetch_sub(1, std::memory_order_relaxed) - 1;
     
     // Remove from weak references list
     auto& refs = obj->rc.weak_refs;
     refs.erase(std::remove(refs.begin(), refs.end(), weak_slot), refs.end());
     
     SS_DEBUG_RC("WEAK_RELEASE %p weak_rc: %d -> %d", 
-                obj, old_count, old_count - 1);
+                obj, old_count, new_count);
+
+    if (new_count < 0) {
+        fprintf(stderr, "ERROR: Object %p has negative weak refcount: %d\n", obj, new_count);
+        abort();
+    }
 }
 
 void RC::process_deferred_releases(VM* vm) {
@@ -120,8 +126,9 @@ void RC::process_deferred_releases(VM* vm) {
         SS_DEBUG_RC("DEALLOCATE %p [%s]", obj, type_name);
         
         // Actually delete the object
-        vm->remove_from_objects_list(obj);  // Ãß°¡µÊ
-        delete obj;
+        auto& stats = vm->get_stats_mutable();
+        stats.total_freed++;
+        stats.current_objects--;
         vm->stats.total_freed++;
         vm->stats.current_objects--;
     }

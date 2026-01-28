@@ -1,8 +1,19 @@
 #include "ss_value.hpp"
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace swiftscript {
+
+namespace {
+bool nearly_equal(Float a, Float b) {
+    const Float diff = std::fabs(a - b);
+    const Float scale = std::max<Float>({1.0, std::fabs(a), std::fabs(b)});
+    return diff <= std::numeric_limits<Float>::epsilon() * scale;
+}
+} // namespace
 
 std::string Value::to_string() const {
     switch (type_) {
@@ -34,7 +45,7 @@ bool Value::equals(const Value& other) const {
         if ((is_int() && other.is_float()) || (is_float() && other.is_int())) {
             Float a = is_float() ? data_.float_val : static_cast<Float>(data_.int_val);
             Float b = other.is_float() ? other.data_.float_val : static_cast<Float>(other.data_.int_val);
-            return std::abs(a - b) < 1e-9;
+            return nearly_equal(a, b);
         }
         return false;
     }
@@ -48,7 +59,7 @@ bool Value::equals(const Value& other) const {
         case Type::Int:
             return data_.int_val == other.data_.int_val;
         case Type::Float:
-            return std::abs(data_.float_val - other.data_.float_val) < 1e-9;
+            return nearly_equal(data_.float_val, other.data_.float_val);
         case Type::Object:
             // Object equality is identity
             return data_.object_val == other.data_.object_val;
