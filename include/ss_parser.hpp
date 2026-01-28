@@ -30,6 +30,7 @@ private:
     StmtPtr var_declaration();
     StmtPtr func_declaration();
     StmtPtr class_declaration();
+    std::unique_ptr<VarDeclStmt> parse_variable_decl(bool is_let);
     StmtPtr statement();
     StmtPtr if_statement();
     StmtPtr guard_statement();

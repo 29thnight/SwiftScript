@@ -131,24 +131,28 @@ StmtPtr Parser::var_declaration() {
     bool is_let = check(TokenType::Let);
     advance();  // consume 'var' or 'let'
 
+    auto stmt = parse_variable_decl(is_let);
+
+    // Semicolons are optional (Swift-style)
+    match(TokenType::Semicolon);
+    return stmt;
+}
+
+std::unique_ptr<VarDeclStmt> Parser::parse_variable_decl(bool is_let) {
     const Token& name_tok = consume(TokenType::Identifier, "Expected variable name.");
     auto stmt = std::make_unique<VarDeclStmt>();
     stmt->line = name_tok.line;
     stmt->name = std::string(name_tok.lexeme);
     stmt->is_let = is_let;
 
-    // Optional type annotation
     if (match(TokenType::Colon)) {
         stmt->type_annotation = parse_type_annotation();
     }
 
-    // Optional initializer
     if (match(TokenType::Equal)) {
         stmt->initializer = expression();
     }
 
-    // Semicolons are optional (Swift-style)
-    match(TokenType::Semicolon);
     return stmt;
 }
 
@@ -195,13 +199,49 @@ StmtPtr Parser::class_declaration() {
     stmt->line = name_tok.line;
     stmt->name = std::string(name_tok.lexeme);
 
+    if (match(TokenType::Colon)) {
+        const Token& base_tok = consume(TokenType::Identifier, "Expected superclass name after ':' in class declaration.");
+        stmt->superclass_name = std::string(base_tok.lexeme);
+    }
+
     consume(TokenType::LeftBrace, "Expected '{' after class name.");
     while (!check(TokenType::RightBrace) && !is_at_end()) {
-        if (!check(TokenType::Func)) {
-            error(peek(), "Expected method declaration inside class.");
+        bool is_override = false;
+        if (match(TokenType::Override)) {
+            is_override = true;
         }
-        auto method = std::unique_ptr<FuncDeclStmt>(static_cast<FuncDeclStmt*>(func_declaration().release()));
-        stmt->methods.push_back(std::move(method));
+
+        if (check(TokenType::Deinit)) {
+            if (is_override) {
+                error(previous(), "'override' cannot be used with 'deinit'.");
+            }
+            advance(); // consume 'deinit'
+            if (stmt->deinit_body) {
+                error(previous(), "Class can only have one deinit.");
+            }
+            stmt->deinit_body = block();
+            continue;
+        }
+
+        if (check(TokenType::Func)) {
+            auto method = std::unique_ptr<FuncDeclStmt>(static_cast<FuncDeclStmt*>(func_declaration().release()));
+            method->is_override = is_override;
+            stmt->methods.push_back(std::move(method));
+            continue;
+        } else if (is_override) {
+            error(previous(), "'override' must precede a method declaration.");
+        }
+
+        if (check(TokenType::Var) || check(TokenType::Let)) {
+            bool is_let = check(TokenType::Let);
+            advance();
+            auto property = parse_variable_decl(is_let);
+            match(TokenType::Semicolon);
+            stmt->properties.push_back(std::move(property));
+            continue;
+        }
+
+        error(peek(), "Expected method or property declaration inside class.");
     }
     consume(TokenType::RightBrace, "Expected '}' after class body.");
     return stmt;
@@ -746,6 +786,21 @@ ExprPtr Parser::primary() {
         auto lit = std::make_unique<LiteralExpr>(Value::null());
         lit->line = line;
         return lit;
+    }
+
+    // super.member
+    if (match(TokenType::Super)) {
+        uint32_t line = previous().line;
+        consume(TokenType::Dot, "Expected '.' after 'super'.");
+        const Token& method_tok = ([&]() -> const Token& {
+            if (check(TokenType::Identifier) || check(TokenType::Init)) {
+                return advance();
+            }
+            error(peek(), "Expected method name after 'super.'");
+        })();
+        auto super_expr = std::make_unique<SuperExpr>(std::string(method_tok.lexeme));
+        super_expr->line = line;
+        return super_expr;
     }
 
     // Identifier

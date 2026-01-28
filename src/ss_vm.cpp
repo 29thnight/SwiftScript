@@ -196,6 +196,106 @@ namespace swiftscript {
         std::cout << "=================================\n";
     }
 
+    void VM::execute_deinit(InstanceObject* inst, Value deinit_method) {
+        if (!deinit_method.is_object()) return;
+        
+        Object* method_obj = deinit_method.as_object();
+        FunctionObject* func = nullptr;
+        ClosureObject* closure = nullptr;
+        
+        if (method_obj->type == ObjectType::Closure) {
+            closure = static_cast<ClosureObject*>(method_obj);
+            func = closure->function;
+        } else if (method_obj->type == ObjectType::Function) {
+            func = static_cast<FunctionObject*>(method_obj);
+        }
+        
+        if (!func || !func->chunk) return;
+        
+        // Save current execution state
+        const Chunk* saved_chunk = chunk_;
+        size_t saved_ip = ip_;
+        size_t saved_stack_size = stack_.size();
+        size_t saved_frames = call_frames_.size();
+        
+        try {
+            // Push self (the instance being deallocated)
+            push(Value::from_object(inst));
+            
+            // Setup call frame for deinit
+            call_frames_.emplace_back(
+                saved_stack_size + 1,  // stack_base (after self)
+                0,                      // return_address (not used)
+                chunk_,                 // saved chunk
+                "deinit",              // function name
+                closure,                // closure (if any)
+                false                   // is_initializer
+            );
+            
+            // Switch to deinit's chunk
+            chunk_ = func->chunk.get();
+            ip_ = 0;
+            
+            // Execute deinit bytecode until OP_RETURN
+            while (ip_ < chunk_->code.size()) {
+                OpCode op = static_cast<OpCode>(read_byte());
+                
+                if (op == OpCode::OP_RETURN) {
+                    break;  // Exit deinit execution
+                }
+                
+                // Execute the opcode (simplified - just run the main loop step)
+                // We need to handle opcodes manually or call a helper
+                switch (op) {
+                    case OpCode::OP_GET_LOCAL: {
+                        uint16_t slot = read_short();
+                        size_t base = call_frames_.back().stack_base;
+                        push(stack_[base + slot - 1]);  // -1 because self is at base-1
+                        break;
+                    }
+                    case OpCode::OP_GET_PROPERTY: {
+                        const std::string& name = read_string();
+                        Value obj_val = pop();
+                        push(get_property(obj_val, name));
+                        break;
+                    }
+                    case OpCode::OP_PRINT: {
+                        Value val = pop();
+                        std::cout << val.to_string() << '\n';
+                        break;
+                    }
+                    case OpCode::OP_POP:
+                        pop();
+                        break;
+                    case OpCode::OP_NIL:
+                        push(Value::null());
+                        break;
+                    // Add other necessary opcodes...
+                    default:
+                        // For now, skip unknown opcodes
+                        break;
+                }
+            }
+            
+        } catch (...) {
+            // Ignore errors in deinit
+        }
+        
+        // Restore execution state
+        chunk_ = saved_chunk;
+        ip_ = saved_ip;
+        
+        // Restore stack
+        while (stack_.size() > saved_stack_size) {
+            pop();
+        }
+        
+        // Restore call frames
+        while (call_frames_.size() > saved_frames) {
+            call_frames_.pop_back();
+        }
+    }
+
     Value VM::interpret(const std::string& source) {
         Lexer lexer(source);
         auto tokens = lexer.tokenize_all();
@@ -467,7 +567,7 @@ namespace swiftscript {
                         throw std::runtime_error("Function index out of range.");
                     }
                     const auto& proto = chunk_->functions[index];
-                    auto* func = allocate_object<FunctionObject>(proto.name, proto.params, proto.chunk, proto.is_initializer);
+                    auto* func = allocate_object<FunctionObject>(proto.name, proto.params, proto.chunk, proto.is_initializer, proto.is_override);
                     push(Value::from_object(func));
                     break;
                 }
@@ -477,7 +577,7 @@ namespace swiftscript {
                         throw std::runtime_error("Function index out of range.");
                     }
                     const auto& proto = chunk_->functions[index];
-                    auto* func = allocate_object<FunctionObject>(proto.name, proto.params, proto.chunk, proto.is_initializer);
+                    auto* func = allocate_object<FunctionObject>(proto.name, proto.params, proto.chunk, proto.is_initializer, proto.is_override);
                     auto* closure = allocate_object<ClosureObject>(func);
                     closure->upvalues.resize(proto.upvalues.size(), nullptr);
 
@@ -530,7 +630,84 @@ namespace swiftscript {
                     }
                     auto* klass = static_cast<ClassObject*>(class_val.as_object());
                     const std::string& name = chunk_->strings[name_idx];
+
+                    // Get function prototype to check is_override flag
+                    FunctionObject* func = nullptr;
+                    if (method_val.is_object() && method_val.as_object()) {
+                        Object* obj = method_val.as_object();
+                        if (obj->type == ObjectType::Closure) {
+                            func = static_cast<ClosureObject*>(obj)->function;
+                        } else if (obj->type == ObjectType::Function) {
+                            func = static_cast<FunctionObject*>(obj);
+                        }
+                    }
+
+                    // Validate override usage
+                    if (func && klass->superclass) {
+                        Value parent_method;
+                        bool parent_has_method = find_method_on_class(klass->superclass, name, parent_method);
+                        
+                        // Check in function chunk's functions array for is_override flag
+                        // Since we're in OP_METHOD right after OP_FUNCTION/OP_CLOSURE, the function was just created
+                        // We need to get is_override from the FunctionPrototype
+                        bool is_override = func->is_override;
+                        
+                        if (parent_has_method && !is_override && name != "init") {
+                            throw std::runtime_error("Method '" + name + "' overrides a superclass method but is not marked with 'override'");
+                        }
+                        
+                        if (!parent_has_method && is_override) {
+                            throw std::runtime_error("Method '" + name + "' marked with 'override' but does not override any superclass method");
+                        }
+                    }
+
                     klass->methods[name] = method_val;
+                    break;
+                }
+                case OpCode::OP_DEFINE_PROPERTY: {
+                    uint16_t name_idx = read_short();
+                    uint8_t flags = read_byte();
+                    bool is_let = (flags & 0x1) != 0;
+                    if (stack_.size() < 2) {
+                        throw std::runtime_error("Stack underflow on property definition.");
+                    }
+                    Value default_value = peek(0);
+                    if (default_value.is_object() && default_value.ref_type() == RefType::Strong) {
+                        RC::retain(default_value.as_object());
+                    }
+                    pop();
+                    Value class_val = peek(0);
+                    if (!class_val.is_object() || !class_val.as_object() || class_val.as_object()->type != ObjectType::Class) {
+                        throw std::runtime_error("OP_DEFINE_PROPERTY expects class on stack.");
+                    }
+                    if (name_idx >= chunk_->strings.size()) {
+                        throw std::runtime_error("Property name index out of range.");
+                    }
+                    auto* klass = static_cast<ClassObject*>(class_val.as_object());
+                    ClassObject::PropertyInfo info;
+                    info.name = chunk_->strings[name_idx];
+                    info.default_value = default_value;
+                    info.is_let = is_let;
+                    klass->properties.push_back(std::move(info));
+                    break;
+                }
+                case OpCode::OP_INHERIT: {
+                    if (stack_.size() < 2) {
+                        throw std::runtime_error("Stack underflow on inherit.");
+                    }
+                    Value subclass_val = peek(0);
+                    Value superclass_val = stack_[stack_.size() - 2];
+                    if (!subclass_val.is_object() || !subclass_val.as_object() || subclass_val.as_object()->type != ObjectType::Class) {
+                        throw std::runtime_error("OP_INHERIT expects subclass on stack.");
+                    }
+                    if (!superclass_val.is_object() || !superclass_val.as_object() || superclass_val.as_object()->type != ObjectType::Class) {
+                        throw std::runtime_error("Superclass must be a class.");
+                    }
+                    auto* subclass = static_cast<ClassObject*>(subclass_val.as_object());
+                    auto* superclass = static_cast<ClassObject*>(superclass_val.as_object());
+                    subclass->superclass = superclass;
+                    // Remove superclass from stack, keep subclass on top
+                    stack_.erase(stack_.end() - 2);
                     break;
                 }
                 case OpCode::OP_CALL:
@@ -553,6 +730,22 @@ namespace swiftscript {
                     if (obj->type == ObjectType::Class) {
                         auto* klass = static_cast<ClassObject*>(obj);
                         auto* instance = allocate_object<InstanceObject>(klass);
+
+                        // Initialize properties from the entire inheritance chain (base first)
+                        std::vector<ClassObject*> hierarchy;
+                        for (ClassObject* c = klass; c != nullptr; c = c->superclass) {
+                            hierarchy.push_back(c);
+                        }
+                        for (auto it = hierarchy.rbegin(); it != hierarchy.rend(); ++it) {
+                            for (const auto& property : (*it)->properties) {
+                                Value prop_value = property.default_value;
+                                if (prop_value.is_object() && prop_value.ref_type() == RefType::Strong) {
+                                    RC::retain(prop_value.as_object());
+                                }
+                                instance->fields[property.name] = prop_value;
+                            }
+                        }
+
                         // Replace callee with instance for return value
                         stack_[callee_index] = Value::from_object(instance);
                         // Initializer?
@@ -717,6 +910,26 @@ namespace swiftscript {
                     } else {
                         throw std::runtime_error("Property set only supported on instances or maps.");
                     }
+                    break;
+                }
+                case OpCode::OP_SUPER: {
+                    const std::string& name = read_string();
+                    Value receiver = pop();
+                    if (!receiver.is_object() || receiver.as_object()->type != ObjectType::Instance) {
+                        throw std::runtime_error("'super' can only be used on instances.");
+                    }
+                    auto* inst = static_cast<InstanceObject*>(receiver.as_object());
+                    if (!inst->klass || !inst->klass->superclass) {
+                        throw std::runtime_error("No superclass available for 'super' call.");
+                    }
+
+                    Value method_value;
+                    if (!find_method_on_class(inst->klass->superclass, name, method_value)) {
+                        throw std::runtime_error("Undefined super method: " + name);
+                    }
+
+                    auto* bound = allocate_object<BoundMethodObject>(inst, method_value);
+                    push(Value::from_object(bound));
                     break;
                 }
                 case OpCode::OP_RANGE_INCLUSIVE:
@@ -923,9 +1136,9 @@ namespace swiftscript {
                 return field_it->second;
             }
             if (inst->klass) {
-                auto method_it = inst->klass->methods.find(name);
-                if (method_it != inst->klass->methods.end()) {
-                    auto* bound = allocate_object<BoundMethodObject>(inst, method_it->second);
+                Value method_value;
+                if (find_method_on_class(inst->klass, name, method_value)) {
+                    auto* bound = allocate_object<BoundMethodObject>(inst, method_value);
                     return Value::from_object(bound);
                 }
             }
@@ -934,14 +1147,25 @@ namespace swiftscript {
 
         if (obj->type == ObjectType::Class) {
             auto* klass = static_cast<ClassObject*>(obj);
-            auto it = klass->methods.find(name);
-            if (it != klass->methods.end()) {
-                return it->second;
+            Value method_value;
+            if (find_method_on_class(klass, name, method_value)) {
+                return method_value;
             }
             return Value::null();
         }
 
         throw std::runtime_error("Property access supported only on arrays and maps.");
+    }
+
+    bool VM::find_method_on_class(ClassObject* klass, const std::string& name, Value& out_method) const {
+        for (ClassObject* current = klass; current != nullptr; current = current->superclass) {
+            auto it = current->methods.find(name);
+            if (it != current->methods.end()) {
+                out_method = it->second;
+                return true;
+            }
+        }
+        return false;
     }
 
     UpvalueObject* VM::capture_upvalue(Value* local) {

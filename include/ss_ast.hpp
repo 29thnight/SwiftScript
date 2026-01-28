@@ -40,6 +40,7 @@ enum class ExprKind {
     Assign,
     Call,
     Member,
+    Super,
     ForceUnwrap,
     OptionalChain,
     NilCoalesce,
@@ -113,6 +114,12 @@ struct MemberExpr : Expr {
     MemberExpr() : Expr(ExprKind::Member) {}
     MemberExpr(ExprPtr obj, std::string m)
         : Expr(ExprKind::Member), object(std::move(obj)), member(std::move(m)) {}
+};
+
+struct SuperExpr : Expr {
+    std::string method;
+    SuperExpr() : Expr(ExprKind::Super) {}
+    explicit SuperExpr(std::string m) : Expr(ExprKind::Super), method(std::move(m)) {}
 };
 
 // ---- Optional-specific expressions ----
@@ -332,12 +339,16 @@ struct FuncDeclStmt : Stmt {
     std::vector<std::pair<std::string, TypeAnnotation>> params;
     std::unique_ptr<BlockStmt> body;
     std::optional<TypeAnnotation> return_type;
+    bool is_override{false};
     FuncDeclStmt() : Stmt(StmtKind::FuncDecl) {}
 };
 
 struct ClassDeclStmt : Stmt {
     std::string name;
+    std::optional<std::string> superclass_name;
     std::vector<std::unique_ptr<FuncDeclStmt>> methods;
+    std::vector<std::unique_ptr<VarDeclStmt>> properties;
+    std::unique_ptr<BlockStmt> deinit_body;  // Optional deinit
     ClassDeclStmt() : Stmt(StmtKind::ClassDecl) {}
 };
 

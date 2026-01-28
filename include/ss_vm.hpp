@@ -71,6 +71,10 @@ namespace swiftscript {
         void push(Value val);
         Value pop();
         Value peek(size_t offset = 0) const;
+        size_t stack_size() const { return stack_.size(); }
+
+        // Deinit execution
+        void execute_deinit(InstanceObject* inst, Value deinit_method);
 
         // Global variables
         void set_global(const std::string& name, Value val);
@@ -103,6 +107,7 @@ namespace swiftscript {
         size_t current_stack_base() const;
         bool is_truthy(const Value& value) const;
         Value get_property(const Value& object, const std::string& name);
+        bool find_method_on_class(ClassObject* klass, const std::string& name, Value& out_method) const;
 
         UpvalueObject* capture_upvalue(Value* local);
         void close_upvalues(Value* last);

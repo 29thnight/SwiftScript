@@ -46,6 +46,15 @@ void RC::release_children(VM* vm, Object* obj, std::unordered_set<Object*>& dele
                 }
             }
         }
+        for (const auto& property : klass->properties) {
+            if (property.default_value.is_object() &&
+                property.default_value.ref_type() == RefType::Strong) {
+                Object* child = property.default_value.as_object();
+                if (child && deleted_set.find(child) == deleted_set.end()) {
+                    RC::release(vm, child);
+                }
+            }
+        }
     } else if (obj->type == ObjectType::Instance) {
         auto* inst = static_cast<InstanceObject*>(obj);
         for (auto& [key, value] : inst->fields) {
@@ -163,6 +172,33 @@ void RC::process_deferred_releases(VM* vm) {
     for (Object* obj : to_process) {
         if (deleted_set.find(obj) != deleted_set.end()) {
             continue;  // Already deleted via a child release
+        }
+
+        // Call deinit before releasing children
+        if (obj->type == ObjectType::Instance) {
+            auto* inst = static_cast<InstanceObject*>(obj);
+            if (inst->klass) {
+                // Look for deinit method
+                Value deinit_method;
+                ClassObject* current = inst->klass;
+                while (current) {
+                    auto it = current->methods.find("deinit");
+                    if (it != current->methods.end()) {
+                        deinit_method = it->second;
+                        break;
+                    }
+                    current = current->superclass;
+                }
+                
+                // Call deinit if found
+                if (!deinit_method.is_null() && deinit_method.is_object()) {
+                    try {
+                        vm->execute_deinit(inst, deinit_method);
+                    } catch (...) {
+                        // Ignore deinit errors during cleanup
+                    }
+                }
+            }
         }
 
         // Weak refs should already be nil'd in release(), but ensure cleanup

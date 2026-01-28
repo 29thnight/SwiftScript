@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace swiftscript {
 
@@ -44,6 +45,9 @@ private:
     int scope_depth_{0};
     int recursion_depth_{0};
     Compiler* enclosing_{nullptr};  // For nested function/closure compilation
+    const std::unordered_set<std::string>* current_class_properties_{nullptr};
+    bool allow_implicit_self_property_{false};
+    bool current_class_has_super_{false};
 
     static constexpr int MAX_RECURSION_DEPTH = 256;
     static constexpr size_t MAX_LOCALS = 65535;
@@ -87,6 +91,7 @@ private:
     void visit(NilCoalesceExpr* expr);
     void visit(OptionalChainExpr* expr);
     void visit(MemberExpr* expr);
+    void visit(SuperExpr* expr);
     void visit(CallExpr* expr);
     void visit(RangeExpr* expr);
     void visit(ArrayLiteralExpr* expr);
@@ -103,6 +108,12 @@ private:
     int resolve_upvalue(const std::string& name);
     int add_upvalue(uint16_t index, bool is_local);
     bool is_exiting_stmt(Stmt* stmt) const;
+    bool is_implicit_property(const std::string& name) const;
+    int resolve_self_index() const;
+    void emit_self_property_get(const std::string& name, uint32_t line);
+    void emit_self_property_set(const std::string& name, uint32_t line);
+    void emit_load_self(uint32_t line);
+    void emit_variable_get(const std::string& name, uint32_t line);
 
     void emit_op(OpCode op, uint32_t line);
     void emit_byte(uint8_t byte, uint32_t line);

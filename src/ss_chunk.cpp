@@ -135,6 +135,14 @@ size_t Chunk::disassemble_instruction(size_t offset) const {
             return jump_instruction("OP_LOOP", -1, offset);
         case OpCode::OP_FUNCTION:
             return short_instruction("OP_FUNCTION", offset);
+        case OpCode::OP_CLASS:
+            return string_instruction("OP_CLASS", offset);
+        case OpCode::OP_METHOD:
+            return string_instruction("OP_METHOD", offset);
+        case OpCode::OP_DEFINE_PROPERTY:
+            return property_instruction("OP_DEFINE_PROPERTY", offset);
+        case OpCode::OP_INHERIT:
+            return simple_instruction("OP_INHERIT", offset);
         case OpCode::OP_CALL:
             return short_instruction("OP_CALL", offset);
         case OpCode::OP_RETURN:
@@ -143,6 +151,8 @@ size_t Chunk::disassemble_instruction(size_t offset) const {
             return short_instruction("OP_GET_PROPERTY", offset);
         case OpCode::OP_SET_PROPERTY:
             return short_instruction("OP_SET_PROPERTY", offset);
+        case OpCode::OP_SUPER:
+            return string_instruction("OP_SUPER", offset);
         case OpCode::OP_OPTIONAL_CHAIN:
             return short_instruction("OP_OPTIONAL_CHAIN", offset);
         case OpCode::OP_UNWRAP:
@@ -217,6 +227,16 @@ size_t Chunk::jump_instruction(const char* name, int sign, size_t offset) const 
               << std::setw(4) << offset << " -> " 
               << (offset + 3 + sign * jump) << "\n";
     return offset + 3;
+}
+
+size_t Chunk::property_instruction(const char* name, size_t offset) const {
+    uint16_t str_idx = (code[offset + 1] << 8) | code[offset + 2];
+    uint8_t flags = code[offset + 3];
+    bool is_let = (flags & 0x1) != 0;
+    std::cout << std::setw(16) << std::left << name << " "
+              << std::setw(4) << str_idx << " ("
+              << (is_let ? "let" : "var") << ")\n";
+    return offset + 4;
 }
 
 } // namespace swiftscript

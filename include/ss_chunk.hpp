@@ -23,6 +23,7 @@ struct FunctionPrototype {
     std::shared_ptr<Chunk> chunk;
     std::vector<UpvalueInfo> upvalues;  // Captured variables info
     bool is_initializer{false};
+    bool is_override{false};
 };
 
     // Opcodes
@@ -74,6 +75,8 @@ struct FunctionPrototype {
         OP_CLOSURE,            // Create closure with upvalues
         OP_CLASS,              // Create class object
         OP_METHOD,             // Attach method to class on stack
+        OP_DEFINE_PROPERTY,    // Register stored property metadata on class
+        OP_INHERIT,            // Link subclass to superclass
         OP_CALL,
         OP_RETURN,
 
@@ -85,6 +88,7 @@ struct FunctionPrototype {
         // Objects & members
         OP_GET_PROPERTY,
         OP_SET_PROPERTY,
+        OP_SUPER,
         OP_OPTIONAL_CHAIN,
 
         // Optional handling
@@ -133,6 +137,7 @@ struct FunctionPrototype {
         size_t string_instruction(const char* name, size_t offset) const;
         size_t short_instruction(const char* name, size_t offset) const;
         size_t jump_instruction(const char* name, int sign, size_t offset) const;
+        size_t property_instruction(const char* name, size_t offset) const;
     };
 
 } // namespace swiftscript

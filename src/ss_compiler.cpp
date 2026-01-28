@@ -83,6 +83,16 @@ void Compiler::compile_stmt(Stmt* stmt) {
 
 void Compiler::visit(ClassDeclStmt* stmt) {
     size_t name_idx = identifier_constant(stmt->name);
+
+    bool has_superclass = stmt->superclass_name.has_value();
+    if (has_superclass && stmt->superclass_name.value() == stmt->name) {
+        throw CompilerError("Class cannot inherit from itself", stmt->line);
+    }
+
+    if (has_superclass) {
+        emit_variable_get(stmt->superclass_name.value(), stmt->line);
+    }
+
     emit_op(OpCode::OP_CLASS, stmt->line);
     emit_short(static_cast<uint16_t>(name_idx), stmt->line);
     if (scope_depth_ > 0) {
@@ -90,8 +100,41 @@ void Compiler::visit(ClassDeclStmt* stmt) {
         mark_local_initialized();
     }
 
+    if (has_superclass) {
+        emit_op(OpCode::OP_INHERIT, stmt->line);
+    }
+
+    std::vector<std::string> property_names;
+    std::unordered_set<std::string> property_lookup;
+    property_names.reserve(stmt->properties.size());
+    for (const auto& property : stmt->properties) {
+        property_names.push_back(property->name);
+        property_lookup.insert(property->name);
+    }
+
+    // Stored properties
+    for (const auto& property : stmt->properties) {
+        if (property->initializer) {
+            compile_expr(property->initializer.get());
+        } else {
+            emit_op(OpCode::OP_NIL, property->line);
+        }
+
+        size_t property_name_idx = identifier_constant(property->name);
+        if (property_name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many property identifiers", property->line);
+        }
+
+        emit_op(OpCode::OP_DEFINE_PROPERTY, property->line);
+        emit_short(static_cast<uint16_t>(property_name_idx), property->line);
+        emit_byte(property->is_let ? 1 : 0, property->line);
+    }
+
     // Methods: class object remains on stack top
     for (const auto& method : stmt->methods) {
+        if (method->is_override && !has_superclass) {
+            throw CompilerError("'override' used in class without superclass", method->line);
+        }
         FunctionPrototype proto;
         proto.name = method->name;
         proto.params.reserve(method->params.size() + 1);
@@ -100,6 +143,7 @@ void Compiler::visit(ClassDeclStmt* stmt) {
             proto.params.push_back(param_name);
         }
         proto.is_initializer = (method->name == "init");
+        proto.is_override = method->is_override;
 
         Compiler method_compiler;
         method_compiler.enclosing_ = this;
@@ -107,6 +151,9 @@ void Compiler::visit(ClassDeclStmt* stmt) {
         method_compiler.locals_.clear();
         method_compiler.scope_depth_ = 1;
         method_compiler.recursion_depth_ = 0;
+        method_compiler.current_class_properties_ = &property_lookup;
+        method_compiler.allow_implicit_self_property_ = true;
+        method_compiler.current_class_has_super_ = has_superclass;
 
         // Implicit self
         method_compiler.declare_local("self", false);
@@ -141,12 +188,65 @@ void Compiler::visit(ClassDeclStmt* stmt) {
         emit_op(has_captures ? OpCode::OP_CLOSURE : OpCode::OP_FUNCTION, method->line);
         emit_short(static_cast<uint16_t>(function_index), method->line);
 
+
         size_t method_name_idx = identifier_constant(method->name);
         if (method_name_idx > std::numeric_limits<uint16_t>::max()) {
             throw CompilerError("Too many method identifiers", method->line);
         }
         emit_op(OpCode::OP_METHOD, method->line);
         emit_short(static_cast<uint16_t>(method_name_idx), method->line);
+    }
+
+    // Deinit: compile as special method
+    if (stmt->deinit_body) {
+        FunctionPrototype proto;
+        proto.name = "deinit";
+        proto.params.push_back("self");
+        proto.is_initializer = false;
+        proto.is_override = false;
+
+        Compiler deinit_compiler;
+        deinit_compiler.enclosing_ = this;
+        deinit_compiler.chunk_ = Chunk{};
+        deinit_compiler.locals_.clear();
+        deinit_compiler.scope_depth_ = 1;
+        deinit_compiler.recursion_depth_ = 0;
+        deinit_compiler.current_class_properties_ = &property_lookup;
+        deinit_compiler.allow_implicit_self_property_ = true;
+        deinit_compiler.current_class_has_super_ = has_superclass;
+
+        // Implicit self
+        deinit_compiler.declare_local("self", false);
+        deinit_compiler.mark_local_initialized();
+
+        for (const auto& statement : stmt->deinit_body->statements) {
+            deinit_compiler.compile_stmt(statement.get());
+        }
+
+        deinit_compiler.emit_op(OpCode::OP_NIL, stmt->line);
+        deinit_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+        proto.chunk = std::make_shared<Chunk>(std::move(deinit_compiler.chunk_));
+        proto.upvalues.reserve(deinit_compiler.upvalues_.size());
+        for (const auto& uv : deinit_compiler.upvalues_) {
+            proto.upvalues.push_back({uv.index, uv.is_local});
+        }
+
+        size_t function_index = chunk_.add_function(std::move(proto));
+        if (function_index > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many functions in chunk", stmt->line);
+        }
+
+        bool has_captures = !deinit_compiler.upvalues_.empty();
+        emit_op(has_captures ? OpCode::OP_CLOSURE : OpCode::OP_FUNCTION, stmt->line);
+        emit_short(static_cast<uint16_t>(function_index), stmt->line);
+
+        size_t deinit_name_idx = identifier_constant("deinit");
+        if (deinit_name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many method identifiers", stmt->line);
+        }
+        emit_op(OpCode::OP_METHOD, stmt->line);
+        emit_short(static_cast<uint16_t>(deinit_name_idx), stmt->line);
     }
 
     if (scope_depth_ == 0) {
@@ -160,6 +260,7 @@ void Compiler::visit(ClassDeclStmt* stmt) {
         emit_op(OpCode::OP_POP, stmt->line);
     }
 }
+
 
 void Compiler::compile_expr(Expr* expr) {
     if (!expr) {
@@ -195,6 +296,9 @@ void Compiler::compile_expr(Expr* expr) {
             break;
         case ExprKind::Member:
             visit(static_cast<MemberExpr*>(expr));
+            break;
+        case ExprKind::Super:
+            visit(static_cast<SuperExpr*>(expr));
             break;
         case ExprKind::Call:
             visit(static_cast<CallExpr*>(expr));
@@ -769,6 +873,11 @@ void Compiler::visit(IdentifierExpr* expr) {
         return;
     }
 
+    if (is_implicit_property(expr->name)) {
+        emit_self_property_get(expr->name, expr->line);
+        return;
+    }
+
     size_t name_idx = identifier_constant(expr->name);
     if (name_idx > std::numeric_limits<uint16_t>::max()) {
         throw CompilerError("Too many identifiers", expr->line);
@@ -844,9 +953,44 @@ void Compiler::visit(BinaryExpr* expr) {
 }
 
 void Compiler::visit(AssignExpr* expr) {
+    bool is_property = is_implicit_property(expr->name);
+
     // ���� ���� ������ ó��
     if (expr->op != TokenType::Equal) {
         // x += 5 -> x = x + 5 로 변환
+        if (is_property) {
+            size_t name_idx = identifier_constant(expr->name);
+            emit_load_self(expr->line);            // for final set
+            emit_load_self(expr->line);            // for current value
+            emit_op(OpCode::OP_GET_PROPERTY, expr->line);
+            emit_short(static_cast<uint16_t>(name_idx), expr->line);
+
+            // 오른쪽 값 컴파일
+            compile_expr(expr->value.get());
+
+            // 연산 실행
+            switch (expr->op) {
+                case TokenType::PlusEqual:
+                    emit_op(OpCode::OP_ADD, expr->line);
+                    break;
+                case TokenType::MinusEqual:
+                    emit_op(OpCode::OP_SUBTRACT, expr->line);
+                    break;
+                case TokenType::StarEqual:
+                    emit_op(OpCode::OP_MULTIPLY, expr->line);
+                    break;
+                case TokenType::SlashEqual:
+                    emit_op(OpCode::OP_DIVIDE, expr->line);
+                    break;
+                default:
+                    throw CompilerError("Unsupported compound assignment", expr->line);
+            }
+
+            emit_op(OpCode::OP_SET_PROPERTY, expr->line);
+            emit_short(static_cast<uint16_t>(name_idx), expr->line);
+            return;
+        }
+
         int local = resolve_local(expr->name);
         if (local != -1) {
             emit_op(OpCode::OP_GET_LOCAL, expr->line);
@@ -888,6 +1032,14 @@ void Compiler::visit(AssignExpr* expr) {
         }
     } else {
         // 일반 할당
+        if (is_property) {
+            size_t name_idx = identifier_constant(expr->name);
+            emit_load_self(expr->line);
+            compile_expr(expr->value.get());
+            emit_op(OpCode::OP_SET_PROPERTY, expr->line);
+            emit_short(static_cast<uint16_t>(name_idx), expr->line);
+            return;
+        }
         compile_expr(expr->value.get());
     }
 
@@ -949,6 +1101,19 @@ void Compiler::visit(MemberExpr* expr) {
         throw CompilerError("Too many identifiers", expr->line);
     }
     emit_op(OpCode::OP_GET_PROPERTY, expr->line);
+    emit_short(static_cast<uint16_t>(name_idx), expr->line);
+}
+
+void Compiler::visit(SuperExpr* expr) {
+    if (!current_class_has_super_) {
+        throw CompilerError("'super' is only available inside subclasses", expr->line);
+    }
+    emit_load_self(expr->line);
+    size_t name_idx = identifier_constant(expr->method);
+    if (name_idx > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many identifiers", expr->line);
+    }
+    emit_op(OpCode::OP_SUPER, expr->line);
     emit_short(static_cast<uint16_t>(name_idx), expr->line);
 }
 
@@ -1187,6 +1352,75 @@ bool Compiler::is_exiting_stmt(Stmt* stmt) const {
         default:
             return false;
     }
+}
+
+bool Compiler::is_implicit_property(const std::string& name) const {
+    return allow_implicit_self_property_
+        && current_class_properties_
+        && current_class_properties_->find(name) != current_class_properties_->end();
+}
+
+int Compiler::resolve_self_index() const {
+    for (int i = static_cast<int>(locals_.size()) - 1; i >= 0; --i) {
+        if (locals_[i].name == "self") {
+            if (locals_[i].depth == -1) {
+                throw CompilerError("Cannot read 'self' before initialization");
+            }
+            return i;
+        }
+    }
+    return -1;
+}
+
+void Compiler::emit_load_self(uint32_t line) {
+    int self_index = resolve_self_index();
+    if (self_index == -1) {
+        throw CompilerError("'self' not available in this context", line);
+    }
+    emit_op(OpCode::OP_GET_LOCAL, line);
+    emit_short(static_cast<uint16_t>(self_index), line);
+}
+
+void Compiler::emit_self_property_get(const std::string& name, uint32_t line) {
+    emit_load_self(line);
+    size_t name_idx = identifier_constant(name);
+    if (name_idx > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many identifiers", line);
+    }
+    emit_op(OpCode::OP_GET_PROPERTY, line);
+    emit_short(static_cast<uint16_t>(name_idx), line);
+}
+
+void Compiler::emit_self_property_set(const std::string& name, uint32_t line) {
+    size_t name_idx = identifier_constant(name);
+    if (name_idx > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many identifiers", line);
+    }
+    emit_op(OpCode::OP_SET_PROPERTY, line);
+    emit_short(static_cast<uint16_t>(name_idx), line);
+}
+
+void Compiler::emit_variable_get(const std::string& name, uint32_t line) {
+    int local = resolve_local(name);
+    if (local != -1) {
+        emit_op(OpCode::OP_GET_LOCAL, line);
+        emit_short(static_cast<uint16_t>(local), line);
+        return;
+    }
+
+    int upvalue = resolve_upvalue(name);
+    if (upvalue != -1) {
+        emit_op(OpCode::OP_GET_UPVALUE, line);
+        emit_short(static_cast<uint16_t>(upvalue), line);
+        return;
+    }
+
+    size_t name_idx = identifier_constant(name);
+    if (name_idx > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many identifiers", line);
+    }
+    emit_op(OpCode::OP_GET_GLOBAL, line);
+    emit_short(static_cast<uint16_t>(name_idx), line);
 }
 
 void Compiler::emit_op(OpCode op, uint32_t line) {

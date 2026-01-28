@@ -222,11 +222,13 @@ public:
     std::vector<std::string> params;
     std::shared_ptr<Chunk> chunk;
     bool is_initializer{false};
+    bool is_override{false};
 
     FunctionObject(std::string function_name,
                    std::vector<std::string> function_params,
                    std::shared_ptr<Chunk> function_chunk,
-                   bool initializer);
+                   bool initializer,
+                   bool override_flag = false);
 
     std::string to_string() const override;
     size_t memory_size() const override;
@@ -236,6 +238,13 @@ class ClassObject : public Object {
 public:
     std::string name;
     std::unordered_map<std::string, Value> methods; // closures
+    struct PropertyInfo {
+        std::string name;
+        Value default_value;
+        bool is_let{false};
+    };
+    std::vector<PropertyInfo> properties;
+    ClassObject* superclass{nullptr};
 
     explicit ClassObject(std::string n)
         : Object(ObjectType::Class), name(std::move(n)) {}
@@ -248,6 +257,10 @@ public:
         size_t total = sizeof(ClassObject) + name.capacity();
         for (const auto& [k, v] : methods) {
             total += k.capacity();
+            total += sizeof(Value);
+        }
+        for (const auto& prop : properties) {
+            total += prop.name.capacity();
             total += sizeof(Value);
         }
         return total;
