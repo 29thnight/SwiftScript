@@ -191,9 +191,7 @@ namespace swiftscript {
     Value VM::execute(const Chunk& chunk) {
         chunk_ = &chunk;
         ip_ = 0;
-        while (!stack_.empty()) {
-            pop();
-        }
+        stack_.clear();
         call_frames_.clear();
         return run();
     }
