@@ -42,24 +42,65 @@ const char* TokenUtils::token_type_name(TokenType type) {
         case TokenType::Func: return "FUNC";
         case TokenType::Class: return "CLASS";
         case TokenType::Struct: return "STRUCT";
+        case TokenType::Enum: return "ENUM";
+        case TokenType::Protocol: return "PROTOCOL";
+        case TokenType::Extension: return "EXTENSION";
         case TokenType::Var: return "VAR";
         case TokenType::Let: return "LET";
         case TokenType::Weak: return "WEAK";
         case TokenType::Unowned: return "UNOWNED";
         case TokenType::If: return "IF";
         case TokenType::Else: return "ELSE";
+        case TokenType::Switch: return "SWITCH";
+        case TokenType::Case: return "CASE";
+        case TokenType::Default: return "DEFAULT";
         case TokenType::For: return "FOR";
         case TokenType::While: return "WHILE";
+        case TokenType::Repeat: return "REPEAT";
+        case TokenType::Break: return "BREAK";
+        case TokenType::Continue: return "CONTINUE";
         case TokenType::Return: return "RETURN";
+        case TokenType::In: return "IN";
+        case TokenType::Import: return "IMPORT";
+        case TokenType::Public: return "PUBLIC";
+        case TokenType::Private: return "PRIVATE";
+        case TokenType::Internal: return "INTERNAL";
+        case TokenType::Static: return "STATIC";
+        case TokenType::Override: return "OVERRIDE";
+        case TokenType::Init: return "INIT";
+        case TokenType::Deinit: return "DEINIT";
+        case TokenType::Self: return "SELF";
+        case TokenType::Super: return "SUPER";
         
         // Operators
         case TokenType::Plus: return "PLUS";
         case TokenType::Minus: return "MINUS";
         case TokenType::Star: return "STAR";
         case TokenType::Slash: return "SLASH";
+        case TokenType::Percent: return "PERCENT";
         case TokenType::Equal: return "EQUAL";
+        case TokenType::PlusEqual: return "PLUS_EQUAL";
+        case TokenType::MinusEqual: return "MINUS_EQUAL";
+        case TokenType::StarEqual: return "STAR_EQUAL";
+        case TokenType::SlashEqual: return "SLASH_EQUAL";
         case TokenType::EqualEqual: return "EQUAL_EQUAL";
         case TokenType::NotEqual: return "NOT_EQUAL";
+        case TokenType::Less: return "LESS";
+        case TokenType::Greater: return "GREATER";
+        case TokenType::LessEqual: return "LESS_EQUAL";
+        case TokenType::GreaterEqual: return "GREATER_EQUAL";
+        case TokenType::And: return "AND";
+        case TokenType::Or: return "OR";
+        case TokenType::Not: return "NOT";
+        case TokenType::BitwiseAnd: return "BITWISE_AND";
+        case TokenType::BitwiseOr: return "BITWISE_OR";
+        case TokenType::BitwiseXor: return "BITWISE_XOR";
+        case TokenType::BitwiseNot: return "BITWISE_NOT";
+        case TokenType::LeftShift: return "LEFT_SHIFT";
+        case TokenType::RightShift: return "RIGHT_SHIFT";
+        case TokenType::Question: return "QUESTION";
+        case TokenType::Colon: return "COLON";
+        case TokenType::Arrow: return "ARROW";
         
         // Delimiters
         case TokenType::LeftParen: return "LEFT_PAREN";
@@ -71,6 +112,10 @@ const char* TokenUtils::token_type_name(TokenType type) {
         case TokenType::Comma: return "COMMA";
         case TokenType::Dot: return "DOT";
         case TokenType::Semicolon: return "SEMICOLON";
+        
+        // Range operators
+        case TokenType::Range: return "RANGE";
+        case TokenType::RangeInclusive: return "RANGE_INCLUSIVE";
         
         default: return "UNKNOWN";
     }

@@ -185,7 +185,12 @@ public:
     
     std::string to_string() const override;
     size_t memory_size() const override {
-        return sizeof(MapObject) + entries.size() * (sizeof(std::string) + sizeof(Value));
+        size_t total = sizeof(MapObject);
+        for (const auto& [key, value] : entries) {
+            total += sizeof(std::string) + sizeof(Value);
+            total += key.capacity();
+        }
+        return total;
     }
 };
 

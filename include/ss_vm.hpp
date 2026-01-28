@@ -73,10 +73,11 @@ namespace swiftscript {
         // Execution control
         void run_cleanup();
         void collect_if_needed();
+        void record_rc_operation();
 
         // Statistics
-        MemoryStats stats;  // Made public for access
         const MemoryStats& get_stats() const { return stats_; }
+        MemoryStats& get_stats_mutable() { return stats_; }
         void print_stats() const;
 
         // Configuration
