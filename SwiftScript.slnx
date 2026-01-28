@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="SwiftScript.vcxproj" Id="30413cda-b530-43c7-8899-369989051a24" />
+</Solution>
