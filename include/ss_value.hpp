@@ -230,6 +230,60 @@ public:
     size_t memory_size() const override;
 };
 
+class BuiltinMethodObject : public Object {
+public:
+    Object* target;
+    std::string method_name;
+    
+    BuiltinMethodObject(Object* t, std::string name)
+        : Object(ObjectType::BuiltinMethod), target(t), method_name(std::move(name)) {}
+    
+    std::string to_string() const override {
+        return "<builtin method '" + method_name + "'>";
+    }
+    
+    size_t memory_size() const override {
+        return sizeof(BuiltinMethodObject) + method_name.capacity();
+    }
+};
+
+// Upvalue for captured variables in closures
+class UpvalueObject : public Object {
+public:
+    Value* location;      // Points to stack slot or closed value
+    Value closed;         // Holds value after variable goes out of scope
+    UpvalueObject* next;  // Linked list of open upvalues
+    
+    explicit UpvalueObject(Value* slot)
+        : Object(ObjectType::Upvalue), location(slot), closed(Value::null()), next(nullptr) {}
+    
+    std::string to_string() const override {
+        return "<upvalue>";
+    }
+    
+    size_t memory_size() const override {
+        return sizeof(UpvalueObject);
+    }
+};
+
+// Closure = Function + captured upvalues
+class ClosureObject : public Object {
+public:
+    FunctionObject* function;
+    std::vector<UpvalueObject*> upvalues;
+    
+    explicit ClosureObject(FunctionObject* fn)
+        : Object(ObjectType::Closure), function(fn) {}
+    
+    std::string to_string() const override {
+        return function ? function->to_string() : "<closure>";
+    }
+    
+    size_t memory_size() const override {
+        return sizeof(ClosureObject) + upvalues.capacity() * sizeof(UpvalueObject*);
+    }
+};
+
 // Verify size constraint
 static_assert(sizeof(Value) == 16, "Value must be exactly 16 bytes");
 

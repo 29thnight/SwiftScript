@@ -43,6 +43,7 @@ enum class ExprKind {
     ArrayLiteral,    // [1, 2, 3]
     DictLiteral,     // ["key": value]
     Subscript,       // array[0], dict["key"]
+    Closure,         // { (params) -> ReturnType in body }
 };
 
 struct Expr {
@@ -186,6 +187,15 @@ struct SubscriptExpr : Expr {
         : Expr(ExprKind::Subscript), object(std::move(obj)), index(std::move(idx)) {}
 };
 
+// Closure expression: { (a: Int, b: Int) -> Int in return a + b }
+struct ClosureExpr : Expr {
+    std::vector<std::pair<std::string, TypeAnnotation>> params;
+    std::optional<TypeAnnotation> return_type;
+    std::vector<StmtPtr> body;
+    
+    ClosureExpr() : Expr(ExprKind::Closure) {}
+};
+
 // ============================================================
 //  Statements
 // ============================================================
@@ -202,6 +212,7 @@ enum class StmtKind {
     ForIn,      // �߰�
     Break,      // �߰�
     Continue,   // �߰�
+    Switch,     // �߰�
     Return,
     FuncDecl,
 };
@@ -287,6 +298,21 @@ struct BreakStmt : Stmt {
 // �߰�: Continue ��
 struct ContinueStmt : Stmt {
     ContinueStmt() : Stmt(StmtKind::Continue) {}
+};
+
+// Switch case clause
+struct CaseClause {
+    std::vector<ExprPtr> patterns;  // Can be values or ranges
+    std::vector<StmtPtr> statements;
+    bool is_default{false};
+};
+
+// Switch statement
+struct SwitchStmt : Stmt {
+    ExprPtr value;
+    std::vector<CaseClause> cases;
+    
+    SwitchStmt() : Stmt(StmtKind::Switch) {}
 };
 
 struct ReturnStmt : Stmt {

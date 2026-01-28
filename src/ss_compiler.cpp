@@ -70,6 +70,9 @@ void Compiler::compile_stmt(Stmt* stmt) {
         case StmtKind::Continue:
             visit(static_cast<ContinueStmt*>(stmt));
             break;
+        case StmtKind::Switch:
+            visit(static_cast<SwitchStmt*>(stmt));
+            break;
         default:
             throw CompilerError("Unknown statement kind", stmt->line);
     }
@@ -124,6 +127,12 @@ void Compiler::compile_expr(Expr* expr) {
             break;
         case ExprKind::Subscript:
             visit(static_cast<SubscriptExpr*>(expr));
+            break;
+        case ExprKind::Ternary:
+            visit(static_cast<TernaryExpr*>(expr));
+            break;
+        case ExprKind::Closure:
+            visit(static_cast<ClosureExpr*>(expr));
             break;
         default:
             throw CompilerError("Unknown expression kind", expr->line);
@@ -260,84 +269,169 @@ void Compiler::visit(WhileStmt* stmt) {
 }
 
 void Compiler::visit(ForInStmt* stmt) {
-    // for i in range { body }�� while ������ ��ȯ
-    // 1. ���� ���� �� iterator ������ ����
-    
-    compile_expr(stmt->iterable.get());  // ������ �� (start, end�� ���ÿ� push)
-    
-    // iterable�� RangeExpr���� Ȯ��
-    if (stmt->iterable->kind != ExprKind::Range) {
-        throw CompilerError("for-in only supports range expressions", stmt->line);
+    // Check if iterable is a Range expression
+    if (stmt->iterable->kind == ExprKind::Range) {
+        // Range for-in loop: for i in 1...5 { }
+        compile_expr(stmt->iterable.get());  // Push start, end
+        
+        RangeExpr* range = static_cast<RangeExpr*>(stmt->iterable.get());
+        
+        begin_scope();
+        
+        // Stack: [start, end]
+        // Loop variable (slot 0 = start)
+        declare_local(stmt->variable, false);
+        mark_local_initialized();
+        
+        // End value (slot 1 = end)
+        declare_local("$end", false);
+        mark_local_initialized();
+        
+        loop_stack_.push_back({});
+        size_t loop_start = chunk_.code.size();
+        loop_stack_.back().loop_start = loop_start;
+        loop_stack_.back().scope_depth_at_start = scope_depth_;
+        
+        // Condition: i < end (exclusive) or i <= end (inclusive)
+        int loop_var_idx = resolve_local(stmt->variable);
+        int end_var_idx = resolve_local("$end");
+        
+        emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(loop_var_idx), stmt->line);
+        
+        emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(end_var_idx), stmt->line);
+        
+        emit_op(range->inclusive ? OpCode::OP_LESS_EQUAL : OpCode::OP_LESS, stmt->line);
+        
+        size_t exit_jump = emit_jump(OpCode::OP_JUMP_IF_FALSE, stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+        
+        compile_stmt(stmt->body.get());
+        
+        // Patch continue jumps
+        for (size_t jump : loop_stack_.back().continue_jumps) {
+            patch_jump(jump);
+        }
+        
+        // Increment i
+        emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(loop_var_idx), stmt->line);
+        emit_constant(Value::from_int(1), stmt->line);
+        emit_op(OpCode::OP_ADD, stmt->line);
+        emit_op(OpCode::OP_SET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(loop_var_idx), stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+        
+        emit_loop(loop_start, stmt->line);
+        
+        patch_jump(exit_jump);
+        emit_op(OpCode::OP_POP, stmt->line);
+        
+        // Patch break jumps
+        for (size_t jump : loop_stack_.back().break_jumps) {
+            patch_jump(jump);
+        }
+        
+        loop_stack_.pop_back();
+        end_scope();
+    } else {
+        // Array for-in loop: for item in array { }
+        // Evaluate iterable (push to stack)
+        compile_expr(stmt->iterable.get());
+        
+        begin_scope();
+        
+        // Store array in local variable
+        declare_local("$array", false);
+        mark_local_initialized();
+        
+        // Initialize index to 0
+        emit_constant(Value::from_int(0), stmt->line);
+        declare_local("$index", false);
+        mark_local_initialized();
+        
+        // Declare loop variable
+        declare_local(stmt->variable, false);
+        emit_op(OpCode::OP_NIL, stmt->line);
+        mark_local_initialized();
+        
+        loop_stack_.push_back({});
+        size_t loop_start = chunk_.code.size();
+        loop_stack_.back().loop_start = loop_start;
+        loop_stack_.back().scope_depth_at_start = scope_depth_;
+        
+        int array_idx = resolve_local("$array");
+        int index_idx = resolve_local("$index");
+        int loop_var_idx = resolve_local(stmt->variable);
+        
+        // Condition: index < array.count
+        // Load array
+        emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(array_idx), stmt->line);
+        
+        // Get array.count
+        size_t count_name_idx = identifier_constant("count");
+        emit_op(OpCode::OP_GET_PROPERTY, stmt->line);
+        emit_short(static_cast<uint16_t>(count_name_idx), stmt->line);
+        
+        // Load index
+        emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(index_idx), stmt->line);
+        
+        // count > index
+        emit_op(OpCode::OP_GREATER, stmt->line);
+        
+        size_t exit_jump = emit_jump(OpCode::OP_JUMP_IF_FALSE, stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+        
+        // Assign loop_var = array[index]
+        // Load array
+        emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(array_idx), stmt->line);
+        
+        // Load index
+        emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(index_idx), stmt->line);
+        
+        // array[index]
+        emit_op(OpCode::OP_GET_SUBSCRIPT, stmt->line);
+        
+        // Store in loop variable
+        emit_op(OpCode::OP_SET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(loop_var_idx), stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+        
+        // Execute loop body
+        compile_stmt(stmt->body.get());
+        
+        // Patch continue jumps
+        for (size_t jump : loop_stack_.back().continue_jumps) {
+            patch_jump(jump);
+        }
+        
+        // Increment index
+        emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(index_idx), stmt->line);
+        emit_constant(Value::from_int(1), stmt->line);
+        emit_op(OpCode::OP_ADD, stmt->line);
+        emit_op(OpCode::OP_SET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(index_idx), stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+        
+        emit_loop(loop_start, stmt->line);
+        
+        patch_jump(exit_jump);
+        emit_op(OpCode::OP_POP, stmt->line);
+        
+        // Patch break jumps
+        for (size_t jump : loop_stack_.back().break_jumps) {
+            patch_jump(jump);
+        }
+        
+        loop_stack_.pop_back();
+        end_scope();
     }
-    
-    RangeExpr* range = static_cast<RangeExpr*>(stmt->iterable.get());
-    
-    // ������ ����
-    begin_scope();
-    
-    // Stack: [start, end]
-    // ���� ���� ���� ������ ���� ������ ��ġ��Ŵ
-    
-    // ���� ������ ���� ���� (slot 0 = start)
-    declare_local(stmt->variable, false);
-    mark_local_initialized();
-    
-    // end ���� ���� ������ ���� (slot 1 = end)
-    declare_local("$end", false);
-    mark_local_initialized();
-    
-    // ���� ���ؽ�Ʈ ����
-    loop_stack_.push_back({});
-    size_t loop_start = chunk_.code.size();
-    loop_stack_.back().loop_start = loop_start;
-    loop_stack_.back().scope_depth_at_start = scope_depth_;
-    
-    // ���� üũ: i < end (exclusive) �Ǵ� i <= end (inclusive)
-    int loop_var_idx = resolve_local(stmt->variable);
-    int end_var_idx = resolve_local("$end");
-    
-    emit_op(OpCode::OP_GET_LOCAL, stmt->line);
-    emit_short(static_cast<uint16_t>(loop_var_idx), stmt->line);
-    
-    emit_op(OpCode::OP_GET_LOCAL, stmt->line);
-    emit_short(static_cast<uint16_t>(end_var_idx), stmt->line);
-    
-    emit_op(range->inclusive ? OpCode::OP_LESS_EQUAL : OpCode::OP_LESS, stmt->line);
-    
-    size_t exit_jump = emit_jump(OpCode::OP_JUMP_IF_FALSE, stmt->line);
-    emit_op(OpCode::OP_POP, stmt->line);
-    
-    // ���� ���� ����
-    compile_stmt(stmt->body.get());
-    
-    // continue ���� ��ġ
-    for (size_t jump : loop_stack_.back().continue_jumps) {
-        patch_jump(jump);
-    }
-    
-    // i�� ������Ŵ
-    emit_op(OpCode::OP_GET_LOCAL, stmt->line);
-    emit_short(static_cast<uint16_t>(loop_var_idx), stmt->line);
-    emit_constant(Value::from_int(1), stmt->line);
-    emit_op(OpCode::OP_ADD, stmt->line);
-    emit_op(OpCode::OP_SET_LOCAL, stmt->line);
-    emit_short(static_cast<uint16_t>(loop_var_idx), stmt->line);
-    emit_op(OpCode::OP_POP, stmt->line);
-    
-    // ���� �������� ����
-    emit_loop(loop_start, stmt->line);
-    
-    // ���� ����
-    patch_jump(exit_jump);
-    emit_op(OpCode::OP_POP, stmt->line);
-    
-    // break ���� ��ġ
-    for (size_t jump : loop_stack_.back().break_jumps) {
-        patch_jump(jump);
-    }
-    
-    loop_stack_.pop_back();
-    end_scope();
 }
 
 void Compiler::visit(BreakStmt* stmt) {
@@ -374,6 +468,107 @@ void Compiler::visit(ContinueStmt* stmt) {
     
     size_t jump = emit_jump(OpCode::OP_JUMP, stmt->line);
     loop_stack_.back().continue_jumps.push_back(jump);
+}
+
+void Compiler::visit(SwitchStmt* stmt) {
+    // Evaluate and store switch value
+    compile_expr(stmt->value.get());
+    
+    begin_scope();
+    declare_local("$switch", false);
+    mark_local_initialized();
+    
+    int switch_var = resolve_local("$switch");
+    std::vector<size_t> end_jumps;
+    
+    // Compile each case
+    for (const auto& case_clause : stmt->cases) {
+        if (case_clause.is_default) {
+            // Default case: always executes if reached
+            for (const auto& case_stmt : case_clause.statements) {
+                compile_stmt(case_stmt.get());
+            }
+            break;  // Default is always last
+        }
+        
+        // For multiple patterns, we need OR logic:
+        // if pattern1 matches OR pattern2 matches OR ... then execute body
+        std::vector<size_t> match_jumps;  // Jump to body if matched
+        
+        for (size_t i = 0; i < case_clause.patterns.size(); ++i) {
+            const auto& pattern = case_clause.patterns[i];
+            
+            // Load switch value
+            emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+            emit_short(static_cast<uint16_t>(switch_var), stmt->line);
+            
+            // Check if pattern is a range
+            if (pattern->kind == ExprKind::Range) {
+                auto* range = static_cast<RangeExpr*>(pattern.get());
+                
+                // value >= start
+                emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+                emit_short(static_cast<uint16_t>(switch_var), stmt->line);
+                compile_expr(range->start.get());
+                emit_op(OpCode::OP_GREATER_EQUAL, stmt->line);
+                
+                // value <= end (or < for exclusive)
+                emit_op(OpCode::OP_GET_LOCAL, stmt->line);
+                emit_short(static_cast<uint16_t>(switch_var), stmt->line);
+                compile_expr(range->end.get());
+                emit_op(range->inclusive ? OpCode::OP_LESS_EQUAL : OpCode::OP_LESS, stmt->line);
+                
+                // Both must be true
+                emit_op(OpCode::OP_AND, stmt->line);
+                
+                // Pop the extra switch value we loaded
+                // (we loaded it twice but only need once for the final check)
+            } else {
+                // Simple value comparison
+                compile_expr(pattern.get());
+                emit_op(OpCode::OP_EQUAL, stmt->line);
+            }
+            
+            // If matched, remember to jump to body
+            size_t match = emit_jump(OpCode::OP_JUMP_IF_FALSE, stmt->line);
+            emit_op(OpCode::OP_POP, stmt->line);
+            
+            // Matched! Jump to case body
+            size_t to_body = emit_jump(OpCode::OP_JUMP, stmt->line);
+            match_jumps.push_back(to_body);
+            
+            // Not matched, try next pattern
+            patch_jump(match);
+            emit_op(OpCode::OP_POP, stmt->line);
+        }
+        
+        // No pattern matched, skip to next case
+        size_t next_case = emit_jump(OpCode::OP_JUMP, stmt->line);
+        
+        // Patch all match jumps to here (case body)
+        for (size_t jump : match_jumps) {
+            patch_jump(jump);
+        }
+        
+        // Execute case body
+        for (const auto& case_stmt : case_clause.statements) {
+            compile_stmt(case_stmt.get());
+        }
+        
+        // Jump to end (no fall-through)
+        size_t to_end = emit_jump(OpCode::OP_JUMP, stmt->line);
+        end_jumps.push_back(to_end);
+        
+        // Patch next case jump
+        patch_jump(next_case);
+    }
+    
+    // Patch all end jumps
+    for (size_t jump : end_jumps) {
+        patch_jump(jump);
+    }
+    
+    end_scope();  // Pops $switch value
 }
 
 void Compiler::visit(BlockStmt* stmt) {
@@ -458,6 +653,13 @@ void Compiler::visit(IdentifierExpr* expr) {
         emit_short(static_cast<uint16_t>(local), expr->line);
         return;
     }
+    
+    int upvalue = resolve_upvalue(expr->name);
+    if (upvalue != -1) {
+        emit_op(OpCode::OP_GET_UPVALUE, expr->line);
+        emit_short(static_cast<uint16_t>(upvalue), expr->line);
+        return;
+    }
 
     size_t name_idx = identifier_constant(expr->name);
     if (name_idx > std::numeric_limits<uint16_t>::max()) {
@@ -536,24 +738,30 @@ void Compiler::visit(BinaryExpr* expr) {
 void Compiler::visit(AssignExpr* expr) {
     // ���� ���� ������ ó��
     if (expr->op != TokenType::Equal) {
-        // x += 5 �� x = x + 5 �� ��ȯ
+        // x += 5 -> x = x + 5 로 변환
         int local = resolve_local(expr->name);
         if (local != -1) {
             emit_op(OpCode::OP_GET_LOCAL, expr->line);
             emit_short(static_cast<uint16_t>(local), expr->line);
         } else {
-            size_t name_idx = identifier_constant(expr->name);
-            if (name_idx > std::numeric_limits<uint16_t>::max()) {
-                throw CompilerError("Too many identifiers", expr->line);
+            int upvalue = resolve_upvalue(expr->name);
+            if (upvalue != -1) {
+                emit_op(OpCode::OP_GET_UPVALUE, expr->line);
+                emit_short(static_cast<uint16_t>(upvalue), expr->line);
+            } else {
+                size_t name_idx = identifier_constant(expr->name);
+                if (name_idx > std::numeric_limits<uint16_t>::max()) {
+                    throw CompilerError("Too many identifiers", expr->line);
+                }
+                emit_op(OpCode::OP_GET_GLOBAL, expr->line);
+                emit_short(static_cast<uint16_t>(name_idx), expr->line);
             }
-            emit_op(OpCode::OP_GET_GLOBAL, expr->line);
-            emit_short(static_cast<uint16_t>(name_idx), expr->line);
         }
         
-        // ������ �� ������
+        // 오른쪽 값 컴파일
         compile_expr(expr->value.get());
         
-        // ���� ����
+        // 연산 실행
         switch (expr->op) {
             case TokenType::PlusEqual:
                 emit_op(OpCode::OP_ADD, expr->line);
@@ -571,7 +779,7 @@ void Compiler::visit(AssignExpr* expr) {
                 throw CompilerError("Unsupported compound assignment", expr->line);
         }
     } else {
-        // �Ϲ� ����
+        // 일반 할당
         compile_expr(expr->value.get());
     }
 
@@ -580,6 +788,13 @@ void Compiler::visit(AssignExpr* expr) {
     if (local != -1) {
         emit_op(OpCode::OP_SET_LOCAL, expr->line);
         emit_short(static_cast<uint16_t>(local), expr->line);
+        return;
+    }
+    
+    int upvalue = resolve_upvalue(expr->name);
+    if (upvalue != -1) {
+        emit_op(OpCode::OP_SET_UPVALUE, expr->line);
+        emit_short(static_cast<uint16_t>(upvalue), expr->line);
         return;
     }
 
@@ -686,6 +901,63 @@ void Compiler::visit(SubscriptExpr* expr) {
     emit_op(OpCode::OP_GET_SUBSCRIPT, expr->line);
 }
 
+void Compiler::visit(TernaryExpr* expr) {
+    compile_expr(expr->condition.get());
+
+    size_t else_jump = emit_jump(OpCode::OP_JUMP_IF_FALSE, expr->line);
+    emit_op(OpCode::OP_POP, expr->line);
+    compile_expr(expr->then_expr.get());
+
+    size_t end_jump = emit_jump(OpCode::OP_JUMP, expr->line);
+    patch_jump(else_jump);
+    emit_op(OpCode::OP_POP, expr->line);
+    compile_expr(expr->else_expr.get());
+
+    patch_jump(end_jump);
+}
+
+void Compiler::visit(ClosureExpr* expr) {
+    // Closures are compiled similar to functions
+    FunctionPrototype proto;
+    proto.name = "<closure>";
+    proto.params.reserve(expr->params.size());
+    for (const auto& [param_name, param_type] : expr->params) {
+        proto.params.push_back(param_name);
+    }
+
+    // Compile closure body
+    Compiler closure_compiler;
+    closure_compiler.chunk_ = Chunk{};
+    closure_compiler.locals_.clear();
+    closure_compiler.scope_depth_ = 1;
+    closure_compiler.recursion_depth_ = 0;
+
+    // Add parameters as local variables
+    for (const auto& [param_name, param_type] : expr->params) {
+        closure_compiler.declare_local(param_name, param_type.is_optional);
+        closure_compiler.mark_local_initialized();
+    }
+
+    // Compile body statements
+    for (const auto& stmt : expr->body) {
+        closure_compiler.compile_stmt(stmt.get());
+    }
+
+    // Implicit return nil if no explicit return
+    closure_compiler.emit_op(OpCode::OP_NIL, expr->line);
+    closure_compiler.emit_op(OpCode::OP_RETURN, expr->line);
+
+    proto.chunk = std::make_shared<Chunk>(std::move(closure_compiler.chunk_));
+
+    size_t function_index = chunk_.add_function(std::move(proto));
+    if (function_index > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many functions in chunk", expr->line);
+    }
+
+    emit_op(OpCode::OP_FUNCTION, expr->line);
+    emit_short(static_cast<uint16_t>(function_index), expr->line);
+}
+
 void Compiler::begin_scope() {
     scope_depth_++;
 }
@@ -717,7 +989,7 @@ void Compiler::declare_local(const std::string& name, bool is_optional) {
         }
     }
 
-    locals_.push_back({name, -1, is_optional});
+    locals_.push_back({name, -1, is_optional, false});
 }
 
 void Compiler::mark_local_initialized() {
@@ -738,6 +1010,43 @@ int Compiler::resolve_local(const std::string& name) const {
         }
     }
     return -1;
+}
+
+int Compiler::resolve_upvalue(const std::string& name) {
+    if (enclosing_ == nullptr) {
+        return -1;
+    }
+    
+    // Check if the variable is a local in the enclosing scope
+    int local = enclosing_->resolve_local(name);
+    if (local != -1) {
+        enclosing_->locals_[local].is_captured = true;
+        return add_upvalue(static_cast<uint16_t>(local), true);
+    }
+    
+    // Check if the variable is an upvalue in the enclosing scope
+    int upvalue = enclosing_->resolve_upvalue(name);
+    if (upvalue != -1) {
+        return add_upvalue(static_cast<uint16_t>(upvalue), false);
+    }
+    
+    return -1;
+}
+
+int Compiler::add_upvalue(uint16_t index, bool is_local) {
+    // Check if this upvalue already exists
+    for (size_t i = 0; i < upvalues_.size(); ++i) {
+        if (upvalues_[i].index == index && upvalues_[i].is_local == is_local) {
+            return static_cast<int>(i);
+        }
+    }
+    
+    if (upvalues_.size() >= MAX_UPVALUES) {
+        throw CompilerError("Too many captured variables in closure");
+    }
+    
+    upvalues_.push_back({index, is_local});
+    return static_cast<int>(upvalues_.size() - 1);
 }
 
 bool Compiler::is_exiting_stmt(Stmt* stmt) const {

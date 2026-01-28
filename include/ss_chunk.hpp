@@ -9,13 +9,20 @@
 
 namespace swiftscript {
 
-    struct Chunk;
+struct Chunk;
 
-    struct FunctionPrototype {
-        std::string name;
-        std::vector<std::string> params;
-        std::shared_ptr<Chunk> chunk;
-    };
+// Upvalue descriptor for compilation
+struct UpvalueInfo {
+    uint16_t index;    // Index in enclosing scope (local or upvalue)
+    bool is_local;     // true = captures local, false = captures upvalue
+};
+
+struct FunctionPrototype {
+    std::string name;
+    std::vector<std::string> params;
+    std::shared_ptr<Chunk> chunk;
+    std::vector<UpvalueInfo> upvalues;  // Captured variables info
+};
 
     // Opcodes
     enum class OpCode : uint8_t {
@@ -63,8 +70,14 @@ namespace swiftscript {
 
         // Functions
         OP_FUNCTION,
+        OP_CLOSURE,            // Create closure with upvalues
         OP_CALL,
         OP_RETURN,
+
+        // Upvalues (for closures)
+        OP_GET_UPVALUE,        // Get captured variable
+        OP_SET_UPVALUE,        // Set captured variable
+        OP_CLOSE_UPVALUE,      // Close upvalue when variable goes out of scope
 
         // Objects & members
         OP_GET_PROPERTY,

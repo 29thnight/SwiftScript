@@ -163,6 +163,7 @@ StmtPtr Parser::statement() {
     if (check(TokenType::Guard)) return guard_statement();
     if (check(TokenType::While)) return while_statement();
     if (check(TokenType::For)) return for_in_statement();
+    if (check(TokenType::Switch)) return switch_statement();
     if (check(TokenType::Break)) return break_statement();
     if (check(TokenType::Continue)) return continue_statement();
     if (check(TokenType::Return)) return return_statement();
@@ -303,6 +304,51 @@ StmtPtr Parser::return_statement() {
     return stmt;
 }
 
+StmtPtr Parser::switch_statement() {
+    const Token& switch_tok = advance();  // consume 'switch'
+    
+    ExprPtr value = expression();
+    
+    consume(TokenType::LeftBrace, "Expected '{' after switch value.");
+    
+    auto stmt = std::make_unique<SwitchStmt>();
+    stmt->line = switch_tok.line;
+    stmt->value = std::move(value);
+    
+    // Parse case clauses
+    while (!check(TokenType::RightBrace) && !is_at_end()) {
+        CaseClause clause;
+        
+        if (match(TokenType::Case)) {
+            // Parse case patterns: case 1, 2, 3:
+            do {
+                clause.patterns.push_back(expression());
+            } while (match(TokenType::Comma));
+            
+            consume(TokenType::Colon, "Expected ':' after case pattern.");
+            
+        } else if (match(TokenType::Default)) {
+            clause.is_default = true;
+            consume(TokenType::Colon, "Expected ':' after 'default'.");
+            
+        } else {
+            error(peek(), "Expected 'case' or 'default' in switch statement.");
+        }
+        
+        // Parse statements until next case/default/}
+        while (!check(TokenType::Case) && !check(TokenType::Default) && 
+               !check(TokenType::RightBrace) && !is_at_end()) {
+            clause.statements.push_back(declaration());
+        }
+        
+        stmt->cases.push_back(std::move(clause));
+    }
+    
+    consume(TokenType::RightBrace, "Expected '}' after switch cases.");
+    
+    return stmt;
+}
+
 StmtPtr Parser::print_statement() {
     const Token& print_tok = advance();  // consume 'print' identifier
 
@@ -399,6 +445,24 @@ ExprPtr Parser::assignment() {
         error(previous(), "Invalid assignment target.");
     }
 
+    return expr;
+}
+
+ExprPtr Parser::ternary() {
+    ExprPtr expr = nil_coalesce();
+    
+    // 삼항 연산자: condition ? then_expr : else_expr
+    if (match(TokenType::Question)) {
+        uint32_t line = previous().line;
+        ExprPtr then_expr = expression();
+        consume(TokenType::Colon, "Expected ':' after then branch of ternary operator.");
+        ExprPtr else_expr = ternary();  // Right-associative
+        
+        auto ternary = std::make_unique<TernaryExpr>(std::move(expr), std::move(then_expr), std::move(else_expr));
+        ternary->line = line;
+        return ternary;
+    }
+    
     return expr;
 }
 
@@ -708,7 +772,51 @@ ExprPtr Parser::primary() {
         return arr;
     }
 
+    // Closure expression: { (params) -> ReturnType in body }
+    if (check(TokenType::LeftBrace)) {
+        return closure_expression();
+    }
+
     error(peek(), "Expected expression.");
+}
+
+ExprPtr Parser::closure_expression() {
+    const Token& brace = advance();  // consume '{'
+    uint32_t line = brace.line;
+    
+    auto closure = std::make_unique<ClosureExpr>();
+    closure->line = line;
+    
+    // Check if there are parameters: { (param: Type, ...) -> ReturnType in ... }
+    if (match(TokenType::LeftParen)) {
+        // Parse parameter list
+        if (!check(TokenType::RightParen)) {
+            do {
+                const Token& param_name = consume(TokenType::Identifier, "Expected parameter name.");
+                consume(TokenType::Colon, "Expected ':' after parameter name.");
+                TypeAnnotation param_type = parse_type_annotation();
+                closure->params.emplace_back(std::string(param_name.lexeme), param_type);
+            } while (match(TokenType::Comma));
+        }
+        consume(TokenType::RightParen, "Expected ')' after closure parameters.");
+        
+        // Optional return type: -> Type
+        if (match(TokenType::Arrow)) {
+            closure->return_type = parse_type_annotation();
+        }
+        
+        // 'in' keyword separates parameters from body
+        consume(TokenType::In, "Expected 'in' after closure parameters.");
+    }
+    
+    // Parse closure body (statements until '}')
+    while (!check(TokenType::RightBrace) && !is_at_end()) {
+        closure->body.push_back(declaration());
+    }
+    
+    consume(TokenType::RightBrace, "Expected '}' at end of closure.");
+    
+    return closure;
 }
 
 } // namespace swiftscript

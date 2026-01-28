@@ -34,6 +34,7 @@ private:
     StmtPtr guard_statement();
     StmtPtr while_statement();
     StmtPtr for_in_statement();
+    StmtPtr switch_statement();
     StmtPtr break_statement();
     StmtPtr continue_statement();
     StmtPtr return_statement();
@@ -55,6 +56,7 @@ private:
     ExprPtr unary();
     ExprPtr postfix();
     ExprPtr primary();
+    ExprPtr closure_expression();
 
     // ---- Type annotation ----
     TypeAnnotation parse_type_annotation();

@@ -447,11 +447,49 @@ namespace swiftscript {
                     }
                     size_t callee_index = stack_.size() - arg_count - 1;
                     Value callee = stack_[callee_index];
-                    if (!callee.is_object() || !callee.as_object() ||
-                        callee.as_object()->type != ObjectType::Function) {
+                    
+                    if (!callee.is_object() || !callee.as_object()) {
                         throw std::runtime_error("Attempted to call a non-function.");
                     }
-                    auto* func = static_cast<FunctionObject*>(callee.as_object());
+                    
+                    Object* obj = callee.as_object();
+                    
+                    // Built-in method call handling
+                    if (obj->type == ObjectType::BuiltinMethod) {
+                        auto* method = static_cast<BuiltinMethodObject*>(obj);
+                        
+                        if (method->method_name == "append") {
+                            if (arg_count != 1) {
+                                throw std::runtime_error("append() requires exactly 1 argument.");
+                            }
+                            
+                            if (method->target->type != ObjectType::List) {
+                                throw std::runtime_error("append() can only be called on arrays.");
+                            }
+                            
+                            auto* arr = static_cast<ListObject*>(method->target);
+                            Value arg = stack_[stack_.size() - 1];
+                            
+                            // Add element to array
+                            arr->elements.push_back(arg);
+                            
+                            // Clean up stack: remove callee and arguments
+                            stack_.resize(callee_index);
+                            
+                            // append returns nil
+                            push(Value::null());
+                            break;
+                        }
+                        
+                        throw std::runtime_error("Unknown built-in method: " + method->method_name);
+                    }
+                    
+                    // Regular function call
+                    if (obj->type != ObjectType::Function) {
+                        throw std::runtime_error("Attempted to call a non-function.");
+                    }
+                    
+                    auto* func = static_cast<FunctionObject*>(obj);
                     if (arg_count != func->params.size()) {
                         throw std::runtime_error("Incorrect argument count.");
                     }
@@ -677,16 +715,43 @@ namespace swiftscript {
         if (!object.is_object()) {
             throw std::runtime_error("Attempted property access on non-object.");
         }
+
         Object* obj = object.as_object();
-        if (!obj || obj->type != ObjectType::Map) {
-            throw std::runtime_error("Property access supported only on Map objects.");
+        if (!obj) {
+            throw std::runtime_error("Null object in property access.");
         }
-        auto* map = static_cast<MapObject*>(obj);
-        auto it = map->entries.find(name);
-        if (it == map->entries.end()) {
-            return Value::null();
+
+        // Array properties/methods
+        if (obj->type == ObjectType::List) {
+            auto* arr = static_cast<ListObject*>(obj);
+
+            if (name == "count") {
+                return Value::from_int(static_cast<int64_t>(arr->elements.size()));
+            }
+
+            if (name == "isEmpty") {
+                return Value::from_bool(arr->elements.empty());
+            }
+
+            if (name == "append") {
+                auto* method = allocate_object<BuiltinMethodObject>(obj, "append");
+                return Value::from_object(method);
+            }
+
+            throw std::runtime_error("Unknown array property: " + name);
         }
-        return it->second;
+
+        // Map object properties
+        if (obj->type == ObjectType::Map) {
+            auto* map = static_cast<MapObject*>(obj);
+            auto it = map->entries.find(name);
+            if (it == map->entries.end()) {
+                return Value::null();
+            }
+            return it->second;
+        }
+
+        throw std::runtime_error("Property access supported only on arrays and maps.");
     }
 
 } // namespace swiftscript

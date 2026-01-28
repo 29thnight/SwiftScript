@@ -759,10 +759,12 @@ void test_collection_in_function() {
     std::cout << "Test: Collections in function ... ";
 
     std::string source = R"(
-        func sumArray() -> Int {
+        func sumArray() -> Int 
+        {
             var arr = [10, 20, 30]
             var total = 0
-            for i in 0..<3 {
+            for i in 0..<3 
+            {
                 total += arr[i]
             }
             return total
@@ -899,6 +901,133 @@ void test_invalid_compound_assignment() {
 }
 
 // ============================================================
+// 10. 삼항 연산자 테스트
+// ============================================================
+
+void test_ternary_basic() {
+    std::cout << "Test: Basic ternary operator ... ";
+    
+    std::string source = R"(
+        var x = 5
+        var result = x > 3 ? "big" : "small"
+        print(result)
+    )";
+    
+    std::string result = execute_code(source);
+    assert(result.find("big") != std::string::npos);
+    
+    std::cout << "PASSED\n";
+}
+
+void test_ternary_nested() {
+    std::cout << "Test: Nested ternary operator ... ";
+    
+    std::string source = R"(
+        var score = 85
+        var grade = score >= 90 ? "A" : score >= 80 ? "B" : "C"
+        print(grade)
+    )";
+    
+    std::string result = execute_code(source);
+    assert(result.find("B") != std::string::npos);
+    
+    std::cout << "PASSED\n";
+}
+
+void test_ternary_with_numbers() {
+    std::cout << "Test: Ternary with numbers ... ";
+    
+    std::string source = R"(
+        var a = 10
+        var b = 20
+        var max = a > b ? a : b
+        print(max)
+    )";
+    
+    std::string result = execute_code(source);
+    assert(result.find("20") != std::string::npos);
+    
+    std::cout << "PASSED\n";
+}
+
+
+
+// ============================================================
+// Array Methods Tests
+// ============================================================
+
+void test_array_count() {
+    std::cout << "Test: Array count property ... ";
+    
+    std::string source = R"(
+        var empty = []
+        var numbers = [1, 2, 3, 4, 5]
+        print(empty.count)
+        print(numbers.count)
+    )";
+    
+    std::string result = execute_code(source);
+    assert(result.find("0") != std::string::npos);
+    assert(result.find("5") != std::string::npos);
+    
+    std::cout << "PASSED\n";
+}
+
+void test_array_is_empty() {
+    std::cout << "Test: Array isEmpty property ... ";
+    
+    std::string source = R"(
+        var empty = []
+        var full = [1, 2, 3]
+        print(empty.isEmpty)
+        print(full.isEmpty)
+    )";
+    
+    std::string result = execute_code(source);
+    assert(result.find("true") != std::string::npos);
+    assert(result.find("false") != std::string::npos);
+    
+    std::cout << "PASSED\n";
+}
+
+void test_array_append() {
+    std::cout << "Test: Array append method ... ";
+    
+    std::string source = R"(
+        var numbers = [1, 2, 3]
+        numbers.append(4)
+        numbers.append(5)
+        print(numbers[3])
+        print(numbers[4])
+        print(numbers.count)
+    )";
+    
+    std::string result = execute_code(source);
+    assert(result.find("4") != std::string::npos);
+    assert(result.find("5") != std::string::npos);
+    
+    std::cout << "PASSED\n";
+}
+
+void test_array_for_in() {
+    std::cout << "Test: Array with for-in loop ... ";
+    
+    std::string source = R"(
+        var numbers = [1, 2, 3, 4, 5]
+        var sum = 0
+        for num in numbers {
+            sum += num
+        }
+        print(sum)
+    )";
+    
+    std::string result = execute_code(source);
+    assert(result.find("15") != std::string::npos);
+    
+    std::cout << "PASSED\n";
+}
+
+// ============================================================
 // Main test runner
 // ============================================================
 
@@ -976,6 +1105,19 @@ int main() {
         test_break_outside_loop();
         test_continue_outside_loop();
         test_invalid_compound_assignment();
+        std::cout << "\n";
+
+        std::cout << "--- Ternary Operators ---\n";
+        test_ternary_basic();
+        test_ternary_nested();
+        test_ternary_with_numbers();
+        std::cout << "\n";
+
+        std::cout << "--- Array Methods ---\n";
+        test_array_count();
+        test_array_is_empty();
+        test_array_append();
+        test_array_for_in();
         std::cout << "\n";
 
         std::cout << "======================================\n";

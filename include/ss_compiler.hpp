@@ -31,14 +31,23 @@ private:
         std::string name;
         int depth;
         bool is_optional;
+        bool is_captured{false};  // True if captured by closure
+    };
+
+    struct Upvalue {
+        uint16_t index;
+        bool is_local;
     };
 
     std::vector<Local> locals_;
+    std::vector<Upvalue> upvalues_;
     int scope_depth_{0};
     int recursion_depth_{0};
+    Compiler* enclosing_{nullptr};  // For nested function/closure compilation
 
     static constexpr int MAX_RECURSION_DEPTH = 256;
     static constexpr size_t MAX_LOCALS = 65535;
+    static constexpr size_t MAX_UPVALUES = 256;
 
     // �߰�: ���� ���ؽ�Ʈ
     struct LoopContext {
@@ -61,6 +70,7 @@ private:
     void visit(ForInStmt* stmt);      // �߰�
     void visit(BreakStmt* stmt);      // �߰�
     void visit(ContinueStmt* stmt);   // �߰�
+    void visit(SwitchStmt* stmt);     // �߰�
     void visit(BlockStmt* stmt);
     void visit(PrintStmt* stmt);
     void visit(ReturnStmt* stmt);
@@ -81,12 +91,16 @@ private:
     void visit(ArrayLiteralExpr* expr);
     void visit(DictLiteralExpr* expr);
     void visit(SubscriptExpr* expr);
+    void visit(TernaryExpr* expr);
+    void visit(ClosureExpr* expr);
 
     void begin_scope();
     void end_scope();
     void declare_local(const std::string& name, bool is_optional);
     void mark_local_initialized();
     int resolve_local(const std::string& name) const;
+    int resolve_upvalue(const std::string& name);
+    int add_upvalue(uint16_t index, bool is_local);
     bool is_exiting_stmt(Stmt* stmt) const;
 
     void emit_op(OpCode op, uint32_t line);
