@@ -247,6 +247,16 @@ namespace swiftscript {
                 // Execute the opcode (simplified - just run the main loop step)
                 // We need to handle opcodes manually or call a helper
                 switch (op) {
+                    case OpCode::OP_CONSTANT: {
+                        push(read_constant());
+                        break;
+                    }
+                    case OpCode::OP_STRING: {
+                        const std::string& str = read_string();
+                        auto* obj = allocate_object<StringObject>(str);
+                        push(Value::from_object(obj));
+                        break;
+                    }
                     case OpCode::OP_GET_LOCAL: {
                         uint16_t slot = read_short();
                         size_t base = call_frames_.back().stack_base;
@@ -311,7 +321,12 @@ namespace swiftscript {
         ip_ = 0;
         stack_.clear();
         call_frames_.clear();
-        return run();
+        Value result = run();
+        run_cleanup();
+        while (!deferred_releases_.empty()) {
+            run_cleanup();
+        }
+        return result;
     }
 
     Value VM::run() {
