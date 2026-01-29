@@ -9,6 +9,8 @@
 
 using namespace swiftscript;
 
+namespace {
+// Static helper function to avoid linker conflicts
 std::string execute_code(const std::string& source) {
     try {
         Lexer lexer(source);
@@ -35,6 +37,10 @@ std::string execute_code(const std::string& source) {
         return std::string("ERROR: ") + e.what();
     }
 }
+} // anonymous namespace
+
+namespace swiftscript {
+namespace test {
 
 void test_switch_basic() {
     std::cout << "Test: Basic switch statement ... ";
@@ -126,27 +132,5 @@ void test_switch_multiple_patterns() {
     std::cout << "PASSED\n";
 }
 
-int main() {
-    std::cout << "======================================\n";
-    std::cout << "  SWITCH STATEMENT TEST SUITE\n";
-    std::cout << "======================================\n\n";
-
-    try {
-        test_switch_basic();
-        test_switch_default();
-        test_switch_range();
-        test_switch_multiple_patterns();
-        
-        std::cout << "\n======================================\n";
-        std::cout << "  ALL SWITCH TESTS PASSED!\n";
-        std::cout << "======================================\n";
-        
-        return 0;
-    } catch (const std::exception& e) {
-        std::cerr << "\n======================================\n";
-        std::cerr << "  TEST FAILED!\n";
-        std::cerr << "  Error: " << e.what() << "\n";
-        std::cerr << "======================================\n";
-        return 1;
-    }
-}
+} // namespace test
+} // namespace swiftscript

@@ -30,6 +30,11 @@ enum class ObjectType : uint8_t {
     Closure,
     Class,
     Instance,
+    Struct,          // Struct type definition
+    StructInstance,  // Struct instance (value type)
+    Enum,            // Enum type definition
+    EnumCase,        // Enum case instance
+    Protocol,        // Protocol definition
     Module,
     Fiber,
     Range,
@@ -48,6 +53,11 @@ inline const char* object_type_name(ObjectType t) {
         case ObjectType::Closure:  return "Closure";
         case ObjectType::Class:    return "Class";
         case ObjectType::Instance: return "Instance";
+        case ObjectType::Struct:   return "Struct";
+        case ObjectType::StructInstance: return "StructInstance";
+        case ObjectType::Enum:     return "Enum";
+        case ObjectType::EnumCase: return "EnumCase";
+        case ObjectType::Protocol: return "Protocol";
         case ObjectType::BoundMethod: return "BoundMethod";
         case ObjectType::Module:   return "Module";
         case ObjectType::Fiber:    return "Fiber";

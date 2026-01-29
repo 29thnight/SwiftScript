@@ -1,0 +1,178 @@
+========================================
+SwiftScript Test Results
+Date: 2026-01-29 16:06:13
+========================================
+
+Starting 8 test suites with 66 tests.
+
+[ Test Suite ] ClassTests
+  [ RUN      ] ClassTests.SimpleClassMethod
+  [       OK ] ClassTests.SimpleClassMethod (0 ms)
+  [ RUN      ] ClassTests.InitializerCalled
+  [       OK ] ClassTests.InitializerCalled (0 ms)
+  [ RUN      ] ClassTests.StoredPropertyDefaults
+  [       OK ] ClassTests.StoredPropertyDefaults (0 ms)
+  [ RUN      ] ClassTests.InheritedMethodCall
+  [       OK ] ClassTests.InheritedMethodCall (0 ms)
+  [ RUN      ] ClassTests.SuperMethodCall
+  [       OK ] ClassTests.SuperMethodCall (0 ms)
+  [ RUN      ] ClassTests.InheritedPropertyDefaults
+  [       OK ] ClassTests.InheritedPropertyDefaults (0 ms)
+  [ RUN      ] ClassTests.OverrideRequired
+  [       OK ] ClassTests.OverrideRequired (0 ms)
+  [ RUN      ] ClassTests.OverrideWithoutBaseMethod
+  [       OK ] ClassTests.OverrideWithoutBaseMethod (0 ms)
+  [ RUN      ] ClassTests.OverrideInitAllowed
+  [       OK ] ClassTests.OverrideInitAllowed (0 ms)
+  [ RUN      ] ClassTests.DeinitCalled
+  [       OK ] ClassTests.DeinitCalled (0 ms)
+  [ RUN      ] ClassTests.DeinitWithProperties
+  [       OK ] ClassTests.DeinitWithProperties (0 ms)
+  Tests passed: 11/11 (21 ms)
+
+[ Test Suite ] ComputedPropertiesTests
+  [ RUN      ] ComputedPropertiesTests.GetterOnly
+  [       OK ] ComputedPropertiesTests.GetterOnly (0 ms)
+  [ RUN      ] ComputedPropertiesTests.GetterSetter
+  [       OK ] ComputedPropertiesTests.GetterSetter (0 ms)
+  [ RUN      ] ComputedPropertiesTests.ReadOnlyShorthand
+  [       OK ] ComputedPropertiesTests.ReadOnlyShorthand (0 ms)
+  [ RUN      ] ComputedPropertiesTests.TemperatureConversion
+  [       OK ] ComputedPropertiesTests.TemperatureConversion (0 ms)
+  [ RUN      ] ComputedPropertiesTests.WithLogic
+  [       OK ] ComputedPropertiesTests.WithLogic (0 ms)
+  [ RUN      ] ComputedPropertiesTests.AccessOtherProperties
+  [       OK ] ComputedPropertiesTests.AccessOtherProperties (0 ms)
+  [ RUN      ] ComputedPropertiesTests.MultipleInClass
+  [       OK ] ComputedPropertiesTests.MultipleInClass (0 ms)
+  Tests passed: 7/7 (45 ms)
+
+[ Test Suite ] StructTests
+  [ RUN      ] StructTests.BasicStruct
+  [       OK ] StructTests.BasicStruct (0 ms)
+  [ RUN      ] StructTests.MemberwiseInit
+  [       OK ] StructTests.MemberwiseInit (0 ms)
+  [ RUN      ] StructTests.CustomInit
+  [       OK ] StructTests.CustomInit (0 ms)
+  [ RUN      ] StructTests.NonMutatingMethod
+  [       OK ] StructTests.NonMutatingMethod (0 ms)
+  [ RUN      ] StructTests.MutatingMethod
+  [       OK ] StructTests.MutatingMethod (0 ms)
+  [ RUN      ] StructTests.ValueSemantics
+  [       OK ] StructTests.ValueSemantics (0 ms)
+  [ RUN      ] StructTests.SelfAccess
+  [       OK ] StructTests.SelfAccess (0 ms)
+  [ RUN      ] StructTests.MultipleMethods
+  [       OK ] StructTests.MultipleMethods (0 ms)
+  [ RUN      ] StructTests.PropertyModification
+  [       OK ] StructTests.PropertyModification (0 ms)
+  [ RUN      ] StructTests.NestedStruct
+  [       OK ] StructTests.NestedStruct (0 ms)
+  Tests passed: 10/10 (10 ms)
+
+[ Test Suite ] ClosureTests
+  [ RUN      ] ClosureTests.BasicClosure
+  [       OK ] ClosureTests.BasicClosure (0 ms)
+  [ RUN      ] ClosureTests.ClosureNoParams
+  [       OK ] ClosureTests.ClosureNoParams (0 ms)
+  [ RUN      ] ClosureTests.ClosureSingleParam
+  [       OK ] ClosureTests.ClosureSingleParam (0 ms)
+  [ RUN      ] ClosureTests.ClosureAsArgument
+  [       OK ] ClosureTests.ClosureAsArgument (0 ms)
+  [ RUN      ] ClosureTests.ClosureMultipleStatements
+  [       OK ] ClosureTests.ClosureMultipleStatements (0 ms)
+  [ RUN      ] ClosureTests.FunctionReturningClosure
+  [       OK ] ClosureTests.FunctionReturningClosure (0 ms)
+  [ RUN      ] ClosureTests.ClosureVariableAssignment
+  [       OK ] ClosureTests.ClosureVariableAssignment (0 ms)
+  [ RUN      ] ClosureTests.ClosureCapturesOuterVariable
+  [       OK ] ClosureTests.ClosureCapturesOuterVariable (0 ms)
+  [ RUN      ] ClosureTests.NestedClosureAfterScopeExit
+  [       OK ] ClosureTests.NestedClosureAfterScopeExit (0 ms)
+  Tests passed: 9/9 (3 ms)
+
+[ Test Suite ] SwitchTests
+  [ RUN      ] SwitchTests.BasicSwitch
+  [       OK ] SwitchTests.BasicSwitch (0 ms)
+  [ RUN      ] SwitchTests.SwitchDefault
+  [       OK ] SwitchTests.SwitchDefault (0 ms)
+  [ RUN      ] SwitchTests.SwitchRange
+  [       OK ] SwitchTests.SwitchRange (0 ms)
+  [ RUN      ] SwitchTests.SwitchMultiplePatterns
+  [       OK ] SwitchTests.SwitchMultiplePatterns (0 ms)
+  Tests passed: 4/4 (1 ms)
+
+[ Test Suite ] EnumTests
+  [ RUN      ] EnumTests.BasicEnum
+  [       OK ] EnumTests.BasicEnum (0 ms)
+  [ RUN      ] EnumTests.EnumRawValues
+  [       OK ] EnumTests.EnumRawValues (0 ms)
+  [ RUN      ] EnumTests.EnumSwitch
+  [       OK ] EnumTests.EnumSwitch (0 ms)
+  [ RUN      ] EnumTests.EnumAssociatedValues
+  [       OK ] EnumTests.EnumAssociatedValues (0 ms)
+  [ RUN      ] EnumTests.EnumComparison
+  [       OK ] EnumTests.EnumComparison (1 ms)
+  [ RUN      ] EnumTests.EnumMethods
+  [       OK ] EnumTests.EnumMethods (0 ms)
+  [ RUN      ] EnumTests.EnumComputedProperties
+  [       OK ] EnumTests.EnumComputedProperties (0 ms)
+  [ RUN      ] EnumTests.MultipleEnums
+  [       OK ] EnumTests.MultipleEnums (0 ms)
+  Tests passed: 8/8 (8 ms)
+
+[ Test Suite ] EnumInlineTests
+  [ RUN      ] EnumInlineTests.BasicEnumDeclaration
+  [       OK ] EnumInlineTests.BasicEnumDeclaration (0 ms)
+  [ RUN      ] EnumInlineTests.EnumRawValues
+  [       OK ] EnumInlineTests.EnumRawValues (0 ms)
+  [ RUN      ] EnumInlineTests.EnumComparison
+  [       OK ] EnumInlineTests.EnumComparison (0 ms)
+  [ RUN      ] EnumInlineTests.EnumWithMethod
+  [       OK ] EnumInlineTests.EnumWithMethod (0 ms)
+  [ RUN      ] EnumInlineTests.EnumMethodWithSelfSwitch
+  [       OK ] EnumInlineTests.EnumMethodWithSelfSwitch (0 ms)
+  [ RUN      ] EnumInlineTests.EnumInSwitchStatement
+  [       OK ] EnumInlineTests.EnumInSwitchStatement (0 ms)
+  [ RUN      ] EnumInlineTests.EnumSimpleComputedProperty
+  [  FAILED  ] EnumInlineTests.EnumSimpleComputedProperty (1 ms)
+    C:\Users\user\Desktop\SwiftScript\test\test_gtest.cpp:756
+    Failed
+Exception: Enum case 'yes' has no property or method named 'text'
+
+  Tests passed: 6/7 (5 ms)
+
+[ Test Suite ] ProtocolTest
+  [ RUN      ] ProtocolTest.BasicProtocolDeclaration
+  [       OK ] ProtocolTest.BasicProtocolDeclaration (0 ms)
+  [ RUN      ] ProtocolTest.ProtocolMethodRequirements
+  [       OK ] ProtocolTest.ProtocolMethodRequirements (0 ms)
+  [ RUN      ] ProtocolTest.ProtocolPropertyRequirements
+  [       OK ] ProtocolTest.ProtocolPropertyRequirements (0 ms)
+  [ RUN      ] ProtocolTest.ProtocolInheritance
+  [       OK ] ProtocolTest.ProtocolInheritance (0 ms)
+  [ RUN      ] ProtocolTest.ProtocolMutatingMethod
+  [       OK ] ProtocolTest.ProtocolMutatingMethod (0 ms)
+  [ RUN      ] ProtocolTest.StructProtocolConformance
+  [       OK ] ProtocolTest.StructProtocolConformance (0 ms)
+  [ RUN      ] ProtocolTest.ClassProtocolConformance
+  [       OK ] ProtocolTest.ClassProtocolConformance (0 ms)
+  [ RUN      ] ProtocolTest.ClassSuperclassAndProtocol
+  [       OK ] ProtocolTest.ClassSuperclassAndProtocol (0 ms)
+  [ RUN      ] ProtocolTest.MultipleProtocolConformance
+  [       OK ] ProtocolTest.MultipleProtocolConformance (0 ms)
+  [ RUN      ] ProtocolTest.ProtocolMethodParameters
+  [       OK ] ProtocolTest.ProtocolMethodParameters (0 ms)
+  Tests passed: 10/10 (3 ms)
+
+========================================
+Test Summary
+========================================
+Total test suites: 8
+Total tests: 66
+Passed: 65
+Failed: 1
+Elapsed time: 105 ms
+========================================
+
+SOME TESTS FAILED!

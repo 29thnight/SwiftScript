@@ -63,9 +63,27 @@ bool Value::equals(const Value& other) const {
             return data_.int_val == other.data_.int_val;
         case Type::Float:
             return nearly_equal(data_.float_val, other.data_.float_val);
-        case Type::Object:
-            // Object equality is identity
-            return data_.object_val == other.data_.object_val;
+        case Type::Object: {
+            // Object equality is usually identity
+            if (data_.object_val == other.data_.object_val) {
+                return true;
+            }
+            
+            // Special case: EnumCaseObject comparison by value
+            if (data_.object_val && other.data_.object_val &&
+                data_.object_val->type == ObjectType::EnumCase &&
+                other.data_.object_val->type == ObjectType::EnumCase) {
+                
+                auto* case_a = static_cast<EnumCaseObject*>(data_.object_val);
+                auto* case_b = static_cast<EnumCaseObject*>(other.data_.object_val);
+                
+                // Same enum type and same case name
+                return case_a->enum_type == case_b->enum_type &&
+                       case_a->case_name == case_b->case_name;
+            }
+            
+            return false;
+        }
     }
     return false;
 }
@@ -151,6 +169,26 @@ size_t FunctionObject::memory_size() const {
         total += chunk->functions.capacity() * sizeof(FunctionPrototype);
     }
     return total;
+}
+
+// StructInstanceObject deep copy for value semantics
+StructInstanceObject* StructInstanceObject::deep_copy(VM& vm) const {
+    auto* copy = vm.allocate_object<StructInstanceObject>(struct_type);
+
+    // Copy all fields
+    for (const auto& [name, value] : fields) {
+        // If field is also a struct instance, deep copy it too
+        if (value.is_object() && value.as_object() &&
+            value.as_object()->type == ObjectType::StructInstance) {
+            auto* nested = static_cast<StructInstanceObject*>(value.as_object());
+            auto* nested_copy = nested->deep_copy(vm);
+            copy->fields[name] = Value::from_object(nested_copy);
+        } else {
+            copy->fields[name] = value;
+        }
+    }
+
+    return copy;
 }
 
 } // namespace swiftscript

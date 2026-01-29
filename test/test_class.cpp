@@ -11,6 +11,8 @@
 using namespace swiftscript;
 using namespace swiftscript::test;
 
+namespace {
+// Static helper function to avoid linker conflicts
 std::string run_code(const std::string& source) {
     try {
         Lexer lexer(source);
@@ -34,6 +36,10 @@ std::string run_code(const std::string& source) {
         return std::string("ERROR: ") + e.what();
     }
 }
+} // anonymous namespace
+
+namespace swiftscript {
+namespace test {
 
 void test_simple_class_method() {
     std::string source = R"(
@@ -249,41 +255,185 @@ void test_deinit_with_properties() {
     AssertHelper::assert_contains(out, "42", "deinit should access property value");
 }
 
-int main() {
-    std::cout << "======================================\n";
-    std::cout << "  CLASS TEST SUITE\n";
-    std::cout << "======================================\n\n";
+// ============================================================================
+// Computed Properties Tests
+// ============================================================================
 
-    TestRunner runner;
-
-    // Run all tests with automatic tracking
-    runner.run_test("simple class method", test_simple_class_method);
-    runner.run_test("initializer is invoked", test_initializer_called);
-    runner.run_test("stored property defaults", test_stored_property_defaults);
-    runner.run_test("inherited method call", test_inherited_method_call);
-    runner.run_test("super method call", test_super_method_call);
-    runner.run_test("inherited property defaults", test_inherited_property_defaults);
-    runner.run_test("override keyword required", test_override_required);
-    runner.run_test("override without base method (should error)", test_override_without_base_method);
-    runner.run_test("override init without keyword allowed", test_override_init_allowed);
-    runner.run_test("deinit is called on deallocation", test_deinit_called);
-    runner.run_test("deinit can access properties", test_deinit_with_properties);
-
-    // Print summary
-    runner.print_summary();
-
-    // Check memory (if tracking was enabled)
-    auto& mem_tracker = MemoryTracker::instance();
-    if (mem_tracker.is_tracking()) {
-        mem_tracker.print_memory_stats();
-        mem_tracker.print_leak_report();
-    }
-
-    if (runner.all_passed()) {
-        std::cout << "\n✓ ALL CLASS TESTS PASSED!\n";
-        return 0;
-    } else {
-        std::cout << "\n✗ SOME TESTS FAILED\n";
-        return 1;
-    }
+void test_computed_property_getter_only() {
+    std::string source = R"(
+        class Circle {
+            var radius: Int = 0
+            
+            var diameter: Int {
+                get {
+                    return radius * 2
+                }
+            }
+        }
+        
+        var c = Circle()
+        c.radius = 5
+        print(c.diameter)
+    )";
+    auto out = run_code(source);
+    AssertHelper::assert_no_error(out);
+    AssertHelper::assert_contains(out, "10", "Computed diameter should be 10");
 }
+
+void test_computed_property_getter_setter() {
+    std::string source = R"(
+        class Rectangle {
+            var width: Int = 0
+            var height: Int = 0
+            
+            var area: Int {
+                get {
+                    return width * height
+                }
+                set {
+                    width = newValue / height
+                }
+            }
+        }
+        
+        var r = Rectangle()
+        r.width = 4
+        r.height = 5
+        print(r.area)
+        r.area = 40
+        print(r.width)
+    )";
+    auto out = run_code(source);
+    AssertHelper::assert_no_error(out);
+    AssertHelper::assert_contains(out, "20", "Area should be 20");
+    AssertHelper::assert_contains(out, "8", "Width should be 8 after setting area");
+}
+
+void test_computed_property_read_only_shorthand() {
+    std::string source = R"(
+        class Point {
+            var x: Int = 0
+            var y: Int = 0
+            
+            var magnitude: Int {
+                return x * x + y * y
+            }
+        }
+        
+        var p = Point()
+        p.x = 3
+        p.y = 4
+        print(p.magnitude)
+    )";
+    auto out = run_code(source);
+    AssertHelper::assert_no_error(out);
+    AssertHelper::assert_contains(out, "25", "Magnitude should be 25");
+}
+
+void test_computed_property_temperature_conversion() {
+    std::string source = R"(
+        class Temperature {
+            var celsius: Int = 0
+            
+            var fahrenheit: Int {
+                get {
+                    return celsius * 2 + 32
+                }
+                set {
+                    celsius = (newValue - 32) / 2
+                }
+            }
+        }
+        
+        var t = Temperature()
+        t.celsius = 100
+        print(t.fahrenheit)
+        t.fahrenheit = 32
+        print(t.celsius)
+    )";
+    auto out = run_code(source);
+    AssertHelper::assert_no_error(out);
+    AssertHelper::assert_contains(out, "232", "100C should be ~232 (simplified)");
+    AssertHelper::assert_contains(out, "0", "32F should be 0C");
+}
+
+void test_computed_property_with_logic() {
+    std::string source = R"(
+        class Person {
+            var birthYear: Int = 2000
+            
+            var age: Int {
+                get {
+                    return 2024 - birthYear
+                }
+                set {
+                    birthYear = 2024 - newValue
+                }
+            }
+        }
+        
+        var p = Person()
+        p.birthYear = 1990
+        print(p.age)
+        p.age = 30
+        print(p.birthYear)
+    )";
+    auto out = run_code(source);
+    AssertHelper::assert_no_error(out);
+    AssertHelper::assert_contains(out, "34", "Age should be 34");
+    AssertHelper::assert_contains(out, "1994", "Birth year should be 1994");
+}
+
+void test_computed_property_access_other_properties() {
+    std::string source = R"(
+        class BankAccount {
+            var balance: Int = 0
+            var interestRate: Int = 5
+            
+            var interest: Int {
+                return balance * interestRate / 100
+            }
+            
+            var totalWithInterest: Int {
+                return balance + interest
+            }
+        }
+        
+        var account = BankAccount()
+        account.balance = 1000
+        print(account.interest)
+        print(account.totalWithInterest)
+    )";
+    auto out = run_code(source);
+    AssertHelper::assert_no_error(out);
+    AssertHelper::assert_contains(out, "50", "Interest should be 50");
+    AssertHelper::assert_contains(out, "1050", "Total with interest should be 1050");
+}
+
+void test_computed_property_multiple_in_class() {
+    std::string source = R"(
+        class Square {
+            var side: Int = 0
+            
+            var area: Int {
+                return side * side
+            }
+            
+            var perimeter: Int {
+                return side * 4
+            }
+        }
+        
+        var s = Square()
+        s.side = 5
+        print(s.area)
+        print(s.perimeter)
+    )";
+    auto out = run_code(source);
+    AssertHelper::assert_no_error(out);
+    AssertHelper::assert_contains(out, "25", "Area should be 25");
+    AssertHelper::assert_contains(out, "20", "Perimeter should be 20");
+}
+
+} // namespace test
+} // namespace swiftscript

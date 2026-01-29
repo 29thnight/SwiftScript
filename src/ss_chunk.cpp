@@ -19,7 +19,7 @@ size_t Chunk::add_constant(Value value) {
 }
 
 size_t Chunk::add_string(const std::string& str) {
-    // ÀÌ¹Ì Á¸ÀçÇÏ´Â ¹®ÀÚ¿­ÀÎÁö È®ÀÎ
+    // ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ ï¿½ï¿½ï¿½Ú¿ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
     for (size_t i = 0; i < strings.size(); ++i) {
         if (strings[i] == str) {
             return i;
@@ -34,16 +34,21 @@ size_t Chunk::add_function(FunctionPrototype proto) {
     return functions.size() - 1;
 }
 
+size_t Chunk::add_protocol(std::shared_ptr<Protocol> protocol) {
+    protocols.push_back(std::move(protocol));
+    return protocols.size() - 1;
+}
+
 size_t Chunk::emit_jump(OpCode op, uint32_t line) {
     write_op(op, line);
-    // ÇÃ·¹ÀÌ½ºÈ¦´õ·Î 0xFFFF ÀÛ¼º
+    // ï¿½Ã·ï¿½ï¿½Ì½ï¿½È¦ï¿½ï¿½ï¿½ï¿½ 0xFFFF ï¿½Û¼ï¿½
     write(0xFF, line);
     write(0xFF, line);
     return code.size() - 2;
 }
 
 void Chunk::patch_jump(size_t offset) {
-    // Á¡ÇÁ ¸í·É¾î ÀÌÈÄºÎÅÍ ÇöÀç À§Ä¡±îÁöÀÇ °Å¸® °è»ê
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½É¾ï¿½ ï¿½ï¿½ï¿½Äºï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Å¸ï¿½ ï¿½ï¿½ï¿½
     size_t jump = code.size() - offset - 2;
     
     if (jump > 0xFFFF) {
@@ -163,8 +168,44 @@ size_t Chunk::disassemble_instruction(size_t offset) const {
             return simple_instruction("OP_RANGE_INCLUSIVE", offset);
         case OpCode::OP_RANGE_EXCLUSIVE:
             return simple_instruction("OP_RANGE_EXCLUSIVE", offset);
+        case OpCode::OP_ARRAY:
+            return short_instruction("OP_ARRAY", offset);
+        case OpCode::OP_DICT:
+            return short_instruction("OP_DICT", offset);
+        case OpCode::OP_GET_SUBSCRIPT:
+            return simple_instruction("OP_GET_SUBSCRIPT", offset);
+        case OpCode::OP_SET_SUBSCRIPT:
+            return simple_instruction("OP_SET_SUBSCRIPT", offset);
+        case OpCode::OP_GET_UPVALUE:
+            return short_instruction("OP_GET_UPVALUE", offset);
+        case OpCode::OP_SET_UPVALUE:
+            return short_instruction("OP_SET_UPVALUE", offset);
+        case OpCode::OP_CLOSE_UPVALUE:
+            return simple_instruction("OP_CLOSE_UPVALUE", offset);
+        case OpCode::OP_CLOSURE:
+            return short_instruction("OP_CLOSURE", offset);
         case OpCode::OP_PRINT:
             return simple_instruction("OP_PRINT", offset);
+        case OpCode::OP_STRUCT:
+            return string_instruction("OP_STRUCT", offset);
+        case OpCode::OP_STRUCT_METHOD: {
+            uint16_t str_idx = (code[offset + 1] << 8) | code[offset + 2];
+            uint8_t is_mutating = code[offset + 3];
+            std::cout << std::setw(16) << std::left << "OP_STRUCT_METHOD" << " "
+                      << std::setw(4) << str_idx << " ("
+                      << (is_mutating ? "mutating" : "non-mutating") << ")\n";
+            return offset + 4;
+        }
+        case OpCode::OP_COPY_VALUE:
+            return simple_instruction("OP_COPY_VALUE", offset);
+        case OpCode::OP_ENUM:
+            return string_instruction("OP_ENUM", offset);
+        case OpCode::OP_ENUM_CASE:
+            return string_instruction("OP_ENUM_CASE", offset);
+        case OpCode::OP_PROTOCOL:
+            return short_instruction("OP_PROTOCOL", offset);
+        case OpCode::OP_DEFINE_GLOBAL:
+            return short_instruction("OP_DEFINE_GLOBAL", offset);
         case OpCode::OP_HALT:
             return simple_instruction("OP_HALT", offset);
         default:

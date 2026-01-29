@@ -261,6 +261,22 @@ public:
         }
     }
 
+    static void assert_contains_all(const std::string& text,
+                                    const std::vector<std::string>& substrings,
+                                    const std::string& context = "") {
+        for (const auto& substring : substrings) {
+            if (text.find(substring) == std::string::npos) {
+                std::ostringstream oss;
+                oss << "Expected to find '" << substring << "' in output";
+                if (!context.empty()) {
+                    oss << " (" << context << ")";
+                }
+                oss << "\nActual output: " << text;
+                throw std::runtime_error(oss.str());
+            }
+        }
+    }
+
     template<typename T>
     static void assert_equals(const T& expected, const T& actual, const std::string& context = "") {
         if (expected != actual) {

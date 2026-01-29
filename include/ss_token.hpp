@@ -59,6 +59,9 @@ enum class TokenType {
     Deinit,
     Self,
     Super,
+    Mutating,    // mutating keyword for struct methods
+    Get,         // get keyword for computed properties
+    Set,         // set keyword for computed properties
     
     // Operators
     Plus,           // +

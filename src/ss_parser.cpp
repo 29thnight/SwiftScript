@@ -113,11 +113,23 @@ TypeAnnotation Parser::parse_type_annotation() {
 // ============================================================
 
 StmtPtr Parser::declaration() {
+    if (check(TokenType::Import)) {
+        return import_declaration();
+    }
     if (check(TokenType::Var) || check(TokenType::Let)) {
         return var_declaration();
     }
     if (check(TokenType::Class)) {
         return class_declaration();
+    }
+    if (check(TokenType::Struct)) {
+        return struct_declaration();
+    }
+    if (check(TokenType::Enum)) {
+        return enum_declaration();
+    }
+    if (check(TokenType::Protocol)) {
+        return protocol_declaration();
     }
     if (check(TokenType::Func)) {
         return func_declaration();
@@ -149,10 +161,72 @@ std::unique_ptr<VarDeclStmt> Parser::parse_variable_decl(bool is_let) {
         stmt->type_annotation = parse_type_annotation();
     }
 
-    if (match(TokenType::Equal)) {
+    // Check for computed property
+    if (check(TokenType::LeftBrace)) {
+        // This is a computed property
+        stmt->is_computed = true;
+        advance(); // consume '{'
+        
+        // Check if it's a read-only computed property shorthand
+        // (no get/set keywords, just the body)
+        if (!check(TokenType::Get) && !check(TokenType::Set) && !check(TokenType::RightBrace)) {
+            // Read-only shorthand: var name: Type { body }
+            auto getter_block = std::make_unique<BlockStmt>();
+            getter_block->line = peek().line;
+            
+            // Parse statements until '}'
+            while (!check(TokenType::RightBrace) && !is_at_end()) {
+                getter_block->statements.push_back(statement());
+            }
+            
+            stmt->getter_body = std::move(getter_block);
+        } else {
+            // Parse getter and optional setter with keywords
+            while (!check(TokenType::RightBrace) && !is_at_end()) {
+                if (match(TokenType::Get)) {
+                    stmt->getter_body = block();
+                } else if (match(TokenType::Set)) {
+                    stmt->setter_body = block();
+                } else {
+                    error(peek(), "Expected 'get' or 'set' in computed property.");
+                    break;
+                }
+            }
+        }
+        
+        consume(TokenType::RightBrace, "Expected '}' after computed property.");
+        
+        // Validate: computed property must have a getter
+        if (!stmt->getter_body) {
+            error(name_tok, "Computed property must have a getter.");
+        }
+    } else if (match(TokenType::Equal)) {
+        // Regular stored property with initializer
         stmt->initializer = expression();
     }
 
+    return stmt;
+}
+
+StmtPtr Parser::import_declaration() {
+    const Token& import_tok = advance();  // consume 'import'
+    
+    // Expect a string literal: import "path/to/module.ss"
+    const Token& path_tok = consume(TokenType::String, "Expected string literal after 'import'.");
+    
+    auto stmt = std::make_unique<ImportStmt>();
+    stmt->line = import_tok.line;
+    stmt->module_path = std::string(path_tok.lexeme);
+    
+    // Remove surrounding quotes if present
+    if (!stmt->module_path.empty()) {
+        if (stmt->module_path.front() == '"' && stmt->module_path.back() == '"') {
+            stmt->module_path = stmt->module_path.substr(1, stmt->module_path.length() - 2);
+        }
+    }
+    
+    // Semicolons are optional
+    match(TokenType::Semicolon);
     return stmt;
 }
 
@@ -192,19 +266,46 @@ StmtPtr Parser::func_declaration() {
 }
 
 StmtPtr Parser::class_declaration() {
-    advance(); // consume 'class'
-    const Token& name_tok = consume(TokenType::Identifier, "Expected class name.");
+advance(); // consume 'class'
+const Token& name_tok = consume(TokenType::Identifier, "Expected class name.");
 
-    auto stmt = std::make_unique<ClassDeclStmt>();
-    stmt->line = name_tok.line;
-    stmt->name = std::string(name_tok.lexeme);
+auto stmt = std::make_unique<ClassDeclStmt>();
+stmt->line = name_tok.line;
+stmt->name = std::string(name_tok.lexeme);
 
-    if (match(TokenType::Colon)) {
-        const Token& base_tok = consume(TokenType::Identifier, "Expected superclass name after ':' in class declaration.");
-        stmt->superclass_name = std::string(base_tok.lexeme);
+// Parse superclass and protocol conformances: class MyClass: SuperClass, Protocol1, Protocol2 { ... }
+if (match(TokenType::Colon)) {
+    // First one could be superclass or protocol
+    const Token& first_tok = consume(TokenType::Identifier, "Expected superclass or protocol name after ':' in class declaration.");
+    std::string first_name = std::string(first_tok.lexeme);
+        
+    // Heuristic: If there are more names, treat first as superclass
+    // In a real implementation, you'd need type information to distinguish
+    // For now, we'll treat the first as superclass if it starts with uppercase (Swift convention)
+    // and subsequent ones as protocols
+    bool has_superclass = !first_name.empty() && std::isupper(first_name[0]);
+        
+    if (has_superclass && !check(TokenType::Comma)) {
+        // Only superclass, no protocols
+        stmt->superclass_name = first_name;
+    } else if (has_superclass && check(TokenType::Comma)) {
+        // Superclass followed by protocols
+        stmt->superclass_name = first_name;
+        while (match(TokenType::Comma)) {
+            const Token& protocol_tok = consume(TokenType::Identifier, "Expected protocol name.");
+            stmt->protocol_conformances.push_back(std::string(protocol_tok.lexeme));
+        }
+    } else {
+        // Only protocols (no superclass)
+        stmt->protocol_conformances.push_back(first_name);
+        while (match(TokenType::Comma)) {
+            const Token& protocol_tok = consume(TokenType::Identifier, "Expected protocol name.");
+            stmt->protocol_conformances.push_back(std::string(protocol_tok.lexeme));
+        }
     }
+}
 
-    consume(TokenType::LeftBrace, "Expected '{' after class name.");
+consume(TokenType::LeftBrace, "Expected '{' after class name.");
     while (!check(TokenType::RightBrace) && !is_at_end()) {
         bool is_override = false;
         if (match(TokenType::Override)) {
@@ -244,6 +345,365 @@ StmtPtr Parser::class_declaration() {
         error(peek(), "Expected method or property declaration inside class.");
     }
     consume(TokenType::RightBrace, "Expected '}' after class body.");
+    return stmt;
+}
+
+StmtPtr Parser::struct_declaration() {
+advance(); // consume 'struct'
+const Token& name_tok = consume(TokenType::Identifier, "Expected struct name.");
+
+auto stmt = std::make_unique<StructDeclStmt>();
+stmt->line = name_tok.line;
+stmt->name = std::string(name_tok.lexeme);
+
+// Parse protocol conformances: struct MyStruct: Protocol1, Protocol2 { ... }
+if (match(TokenType::Colon)) {
+    do {
+        const Token& protocol_tok = consume(TokenType::Identifier, "Expected protocol name.");
+        stmt->protocol_conformances.push_back(std::string(protocol_tok.lexeme));
+    } while (match(TokenType::Comma));
+}
+
+consume(TokenType::LeftBrace, "Expected '{' after struct name.");
+
+    while (!check(TokenType::RightBrace) && !is_at_end()) {
+        // Check for mutating modifier
+        bool is_mutating = false;
+        if (match(TokenType::Mutating)) {
+            is_mutating = true;
+        }
+
+        // Method declaration: [mutating] func name(...) -> Type { ... }
+        if (check(TokenType::Func)) {
+            advance(); // consume 'func'
+            const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+
+            auto method = std::make_unique<StructMethodDecl>();
+            method->name = std::string(method_name.lexeme);
+            method->is_mutating = is_mutating;
+
+            // Parameter list
+            consume(TokenType::LeftParen, "Expected '(' after method name.");
+            if (!check(TokenType::RightParen)) {
+                do {
+                    const Token& param_name = consume(TokenType::Identifier, "Expected parameter name.");
+                    consume(TokenType::Colon, "Expected ':' after parameter name.");
+                    TypeAnnotation param_type = parse_type_annotation();
+                    method->params.emplace_back(std::string(param_name.lexeme), param_type);
+                } while (match(TokenType::Comma));
+            }
+            consume(TokenType::RightParen, "Expected ')' after parameters.");
+
+            // Optional return type: -> Type
+            if (match(TokenType::Arrow)) {
+                method->return_type = parse_type_annotation();
+            }
+
+            // Body
+            method->body = block();
+            stmt->methods.push_back(std::move(method));
+            continue;
+        }
+
+        // init declaration (not mutating)
+        if (check(TokenType::Init)) {
+            if (is_mutating) {
+                error(previous(), "'mutating' cannot be used with 'init'.");
+            }
+            advance(); // consume 'init'
+
+            auto init_method = std::make_unique<FuncDeclStmt>();
+            init_method->line = previous().line;
+            init_method->name = "init";
+
+            // Parameter list
+            consume(TokenType::LeftParen, "Expected '(' after 'init'.");
+            if (!check(TokenType::RightParen)) {
+                do {
+                    const Token& param_name = consume(TokenType::Identifier, "Expected parameter name.");
+                    consume(TokenType::Colon, "Expected ':' after parameter name.");
+                    TypeAnnotation param_type = parse_type_annotation();
+                    init_method->params.emplace_back(std::string(param_name.lexeme), param_type);
+                } while (match(TokenType::Comma));
+            }
+            consume(TokenType::RightParen, "Expected ')' after parameters.");
+
+            // Body
+            init_method->body = block();
+            stmt->initializers.push_back(std::move(init_method));
+            continue;
+        }
+
+        // Property declaration: var/let name: Type [= initializer]
+        if (check(TokenType::Var) || check(TokenType::Let)) {
+            if (is_mutating) {
+                error(previous(), "'mutating' can only be used with methods.");
+            }
+            bool is_let = check(TokenType::Let);
+            advance();
+            auto property = parse_variable_decl(is_let);
+            match(TokenType::Semicolon);
+            stmt->properties.push_back(std::move(property));
+            continue;
+        }
+
+        if (is_mutating) {
+            error(previous(), "'mutating' must precede a method declaration.");
+        }
+
+        error(peek(), "Expected method or property declaration inside struct.");
+    }
+
+    consume(TokenType::RightBrace, "Expected '}' after struct body.");
+    return stmt;
+}
+
+StmtPtr Parser::enum_declaration() {
+    advance(); // consume 'enum'
+    const Token& name_tok = consume(TokenType::Identifier, "Expected enum name.");
+
+    auto stmt = std::make_unique<EnumDeclStmt>();
+    stmt->line = name_tok.line;
+    stmt->name = std::string(name_tok.lexeme);
+
+    // Optional raw type: enum Status: Int { ... }
+    if (match(TokenType::Colon)) {
+        stmt->raw_type = parse_type_annotation();
+    }
+
+    consume(TokenType::LeftBrace, "Expected '{' after enum name.");
+
+    while (!check(TokenType::RightBrace) && !is_at_end()) {
+        // case declaration: case north, case south = 1
+        if (match(TokenType::Case)) {
+            do {
+                const Token& case_name = consume(TokenType::Identifier, "Expected case name.");
+                EnumCaseDecl case_decl;
+                case_decl.name = std::string(case_name.lexeme);
+
+                // Optional raw value: case high = 3
+                if (match(TokenType::Equal)) {
+                    // Parse the raw value (integer, string, etc.)
+                    ExprPtr value_expr = primary();
+                    
+                    // Convert expression to Value if it's a literal
+                    if (auto* lit = dynamic_cast<LiteralExpr*>(value_expr.get())) {
+                        case_decl.raw_value = lit->value;
+                    }
+                }
+
+                // Optional associated values: case success(message: String)
+                if (match(TokenType::LeftParen)) {
+                    if (!check(TokenType::RightParen)) {
+                        do {
+                            const Token& param_name = consume(TokenType::Identifier, "Expected parameter name.");
+                            consume(TokenType::Colon, "Expected ':' after parameter name.");
+                            TypeAnnotation param_type = parse_type_annotation();
+                            case_decl.associated_values.emplace_back(std::string(param_name.lexeme), param_type);
+                        } while (match(TokenType::Comma));
+                    }
+                    consume(TokenType::RightParen, "Expected ')' after associated values.");
+                }
+
+                stmt->cases.push_back(std::move(case_decl));
+            } while (match(TokenType::Comma));
+
+            // Optional semicolon or newline
+            match(TokenType::Semicolon);
+            continue;
+        }
+
+        // Method declaration: func describe() -> String { ... }
+        if (check(TokenType::Func)) {
+            advance(); // consume 'func'
+            const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+
+            auto method = std::make_unique<StructMethodDecl>();
+            method->name = std::string(method_name.lexeme);
+
+            // Parameter list
+            consume(TokenType::LeftParen, "Expected '(' after method name.");
+            if (!check(TokenType::RightParen)) {
+                do {
+                    const Token& param_name = consume(TokenType::Identifier, "Expected parameter name.");
+                    consume(TokenType::Colon, "Expected ':' after parameter name.");
+                    TypeAnnotation param_type = parse_type_annotation();
+                    method->params.emplace_back(std::string(param_name.lexeme), param_type);
+                } while (match(TokenType::Comma));
+            }
+            consume(TokenType::RightParen, "Expected ')' after parameters.");
+
+            // Optional return type: -> Type
+            if (match(TokenType::Arrow)) {
+                method->return_type = parse_type_annotation();
+            }
+
+            // Body
+            method->body = block();
+            stmt->methods.push_back(std::move(method));
+            continue;
+        }
+
+        // Computed property: var description: String { ... }
+        if (check(TokenType::Var)) {
+            advance(); // consume 'var'
+            const Token& prop_name = consume(TokenType::Identifier, "Expected property name.");
+            consume(TokenType::Colon, "Expected ':' after property name.");
+            TypeAnnotation prop_type = parse_type_annotation();
+
+            auto method = std::make_unique<StructMethodDecl>();
+            method->name = std::string(prop_name.lexeme);
+            method->return_type = prop_type;
+            method->is_computed_property = true;  // Mark as computed property
+            
+            // Parse the getter body
+            // Enum computed properties use read-only shorthand: var name: Type { body }
+            consume(TokenType::LeftBrace, "Expected '{' after computed property type.");
+            
+            auto getter_block = std::make_unique<BlockStmt>();
+            getter_block->line = peek().line;
+            
+            // Parse statements until '}'
+            while (!check(TokenType::RightBrace) && !is_at_end()) {
+                getter_block->statements.push_back(statement());
+            }
+            
+            consume(TokenType::RightBrace, "Expected '}' after computed property body.");
+            
+            method->body = std::move(getter_block);
+            stmt->methods.push_back(std::move(method));
+            continue;
+        }
+
+        error(peek(), "Expected 'case', 'func', or 'var' inside enum.");
+    }
+
+    consume(TokenType::RightBrace, "Expected '}' after enum body.");
+    return stmt;
+}
+
+StmtPtr Parser::protocol_declaration() {
+    advance(); // consume 'protocol'
+    const Token& name_tok = consume(TokenType::Identifier, "Expected protocol name.");
+
+    auto stmt = std::make_unique<ProtocolDeclStmt>();
+    stmt->line = name_tok.line;
+    stmt->name = std::string(name_tok.lexeme);
+
+    // Optional protocol inheritance: protocol MyProtocol: BaseProtocol1, BaseProtocol2 { ... }
+    if (match(TokenType::Colon)) {
+        do {
+            const Token& inherited_tok = consume(TokenType::Identifier, "Expected inherited protocol name.");
+            stmt->inherited_protocols.push_back(std::string(inherited_tok.lexeme));
+        } while (match(TokenType::Comma));
+    }
+
+    consume(TokenType::LeftBrace, "Expected '{' after protocol name.");
+
+    while (!check(TokenType::RightBrace) && !is_at_end()) {
+        // Method requirement: func methodName(param: Type) -> ReturnType
+        if (match(TokenType::Func)) {
+            const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+
+            ProtocolMethodRequirement method_req;
+            method_req.name = std::string(method_name.lexeme);
+
+            // Parameter list
+            consume(TokenType::LeftParen, "Expected '(' after method name.");
+            if (!check(TokenType::RightParen)) {
+                do {
+                    const Token& param_name = consume(TokenType::Identifier, "Expected parameter name.");
+                    consume(TokenType::Colon, "Expected ':' after parameter name.");
+                    TypeAnnotation param_type = parse_type_annotation();
+                    method_req.params.emplace_back(std::string(param_name.lexeme), param_type);
+                } while (match(TokenType::Comma));
+            }
+            consume(TokenType::RightParen, "Expected ')' after parameters.");
+
+            // Optional return type: -> Type
+            if (match(TokenType::Arrow)) {
+                method_req.return_type = parse_type_annotation();
+            }
+
+            // Check for mutating modifier (for value types)
+            // Note: In Swift, mutating is specified before func
+            // Here we allow it after for simplicity
+            
+            stmt->method_requirements.push_back(std::move(method_req));
+            match(TokenType::Semicolon); // Optional semicolon
+            continue;
+        }
+
+        // Property requirement: var propertyName: Type { get set } or { get }
+        if (check(TokenType::Var) || check(TokenType::Let)) {
+            bool is_let = check(TokenType::Let);
+            advance(); // consume 'var' or 'let'
+            const Token& prop_name = consume(TokenType::Identifier, "Expected property name.");
+            consume(TokenType::Colon, "Expected ':' after property name.");
+            TypeAnnotation prop_type = parse_type_annotation();
+
+            ProtocolPropertyRequirement prop_req;
+            prop_req.name = std::string(prop_name.lexeme);
+            prop_req.type = prop_type;
+            prop_req.has_getter = true;
+
+            // Parse { get } or { get set }
+            consume(TokenType::LeftBrace, "Expected '{' for property accessor specification.");
+            
+            if (consume(TokenType::Identifier, "Expected 'get' in property requirement.").lexeme != "get") {
+                error(previous(), "Expected 'get' in property requirement.");
+            }
+
+            if (check(TokenType::Identifier) && peek().lexeme == "set") {
+                advance(); // consume 'set'
+                prop_req.has_setter = true;
+            }
+
+            consume(TokenType::RightBrace, "Expected '}' after property accessor specification.");
+            
+            stmt->property_requirements.push_back(std::move(prop_req));
+            match(TokenType::Semicolon); // Optional semicolon
+            continue;
+        }
+
+        // Mutating method requirement: mutating func methodName(...)
+        if (match(TokenType::Mutating)) {
+            if (!match(TokenType::Func)) {
+                error(previous(), "Expected 'func' after 'mutating'.");
+            }
+
+            const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+
+            ProtocolMethodRequirement method_req;
+            method_req.name = std::string(method_name.lexeme);
+            method_req.is_mutating = true;
+
+            // Parameter list
+            consume(TokenType::LeftParen, "Expected '(' after method name.");
+            if (!check(TokenType::RightParen)) {
+                do {
+                    const Token& param_name = consume(TokenType::Identifier, "Expected parameter name.");
+                    consume(TokenType::Colon, "Expected ':' after parameter name.");
+                    TypeAnnotation param_type = parse_type_annotation();
+                    method_req.params.emplace_back(std::string(param_name.lexeme), param_type);
+                } while (match(TokenType::Comma));
+            }
+            consume(TokenType::RightParen, "Expected ')' after parameters.");
+
+            // Optional return type: -> Type
+            if (match(TokenType::Arrow)) {
+                method_req.return_type = parse_type_annotation();
+            }
+
+            stmt->method_requirements.push_back(std::move(method_req));
+            match(TokenType::Semicolon); // Optional semicolon
+            continue;
+        }
+
+        error(peek(), "Expected method or property requirement inside protocol.");
+    }
+
+    consume(TokenType::RightBrace, "Expected '}' after protocol body.");
     return stmt;
 }
 
@@ -531,6 +991,18 @@ ExprPtr Parser::assignment() {
             assign->line = ident->line;
             return assign;
         }
+        
+        // For member expressions (obj.prop = value), return as binary expression
+        // The compiler will handle this specially in expression statements
+        if (expr->kind == ExprKind::Member) {
+            auto binary = std::make_unique<BinaryExpr>();
+            binary->op = TokenType::Equal;
+            binary->left = std::move(expr);
+            binary->right = std::move(value);
+            binary->line = previous().line;
+            return binary;
+        }
+        
         error(previous(), "Invalid assignment target.");
     }
 
@@ -801,6 +1273,14 @@ ExprPtr Parser::primary() {
         auto super_expr = std::make_unique<SuperExpr>(std::string(method_tok.lexeme));
         super_expr->line = line;
         return super_expr;
+    }
+
+    // self (treated as identifier in expression context)
+    if (match(TokenType::Self)) {
+        uint32_t line = previous().line;
+        auto ident = std::make_unique<IdentifierExpr>("self");
+        ident->line = line;
+        return ident;
     }
 
     // Identifier

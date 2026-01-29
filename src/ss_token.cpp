@@ -5,7 +5,7 @@
 namespace swiftscript {
 
 bool Token::is_keyword() const {
-    return type >= TokenType::Func && type <= TokenType::Super;
+    return type >= TokenType::Func && type <= TokenType::Mutating;
 }
 
 bool Token::is_operator() const {
@@ -73,6 +73,9 @@ const char* TokenUtils::token_type_name(TokenType type) {
         "DEINIT",
         "SELF",
         "SUPER",
+        "MUTATING",
+        "GET",
+        "SET",
         "PLUS",
         "MINUS",
         "STAR",
@@ -159,6 +162,9 @@ TokenType TokenUtils::keyword_type(std::string_view str) {
         {"deinit", TokenType::Deinit},
         {"self", TokenType::Self},
         {"super", TokenType::Super},
+        {"mutating", TokenType::Mutating},
+        {"get", TokenType::Get},
+        {"set", TokenType::Set},
         {"true", TokenType::True},
         {"false", TokenType::False},
         {"null", TokenType::Null},

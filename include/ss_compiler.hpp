@@ -24,9 +24,15 @@ private:
 class Compiler {
 public:
     Chunk compile(const std::vector<StmtPtr>& program);
+    
+    // Set base directory for resolving relative import paths
+    void set_base_directory(const std::string& dir) { base_directory_ = dir; }
 
 private:
     Chunk chunk_;
+    std::string base_directory_;  // Base directory for resolving imports
+    std::unordered_set<std::string> imported_modules_;  // Track imported modules to prevent duplicates
+    std::unordered_set<std::string> compiling_modules_; // Track modules being compiled (circular dependency detection)
 
     struct Local {
         std::string name;
@@ -48,6 +54,8 @@ private:
     const std::unordered_set<std::string>* current_class_properties_{nullptr};
     bool allow_implicit_self_property_{false};
     bool current_class_has_super_{false};
+    bool in_struct_method_{false};      // True when compiling struct method
+    bool in_mutating_method_{false};    // True when compiling mutating method
 
     static constexpr int MAX_RECURSION_DEPTH = 256;
     static constexpr size_t MAX_LOCALS = 65535;
@@ -71,12 +79,16 @@ private:
     void visit(IfLetStmt* stmt);
     void visit(GuardLetStmt* stmt);
     void visit(WhileStmt* stmt);
-    void visit(ForInStmt* stmt);      // �߰�
-    void visit(BreakStmt* stmt);      // �߰�
-    void visit(ContinueStmt* stmt);   // �߰�
-    void visit(SwitchStmt* stmt);     // �߰�
+    void visit(ForInStmt* stmt);
+    void visit(BreakStmt* stmt);
+    void visit(ContinueStmt* stmt);
+    void visit(SwitchStmt* stmt);
     void visit(BlockStmt* stmt);
     void visit(ClassDeclStmt* stmt);
+    void visit(StructDeclStmt* stmt);  // Struct declaration
+    void visit(EnumDeclStmt* stmt);    // Enum declaration
+    void visit(ProtocolDeclStmt* stmt); // Protocol declaration
+    void visit(ImportStmt* stmt);
     void visit(PrintStmt* stmt);
     void visit(ReturnStmt* stmt);
     void visit(FuncDeclStmt* stmt);
@@ -127,6 +139,7 @@ private:
     size_t identifier_constant(const std::string& name);
 
     Chunk compile_function_body(const FuncDeclStmt& stmt);
+    Chunk compile_struct_method_body(const StructMethodDecl& method, bool is_mutating);
 
     // Helper classes
     class RecursionGuard {

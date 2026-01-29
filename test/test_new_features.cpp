@@ -1031,7 +1031,7 @@ void test_array_for_in() {
 // Main test runner
 // ============================================================
 
-int main() {
+int main_new_features() {
     std::cout << "======================================\n";
     std::cout << "  NEW FEATURES TEST SUITE\n";
     std::cout << "======================================\n\n";
@@ -1133,3 +1133,14 @@ int main() {
         return 1;
     }
 }
+
+// Wrapper functions for test registration
+namespace swiftscript {
+namespace test {
+
+void run_new_features_tests() {
+    main_new_features();
+}
+
+} // namespace test
+} // namespace swiftscript

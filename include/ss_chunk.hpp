@@ -26,6 +26,28 @@ struct FunctionPrototype {
     bool is_override{false};
 };
 
+// Protocol method requirement
+struct ProtocolMethodReq {
+    std::string name;
+    std::vector<std::string> param_names;
+    bool is_mutating{false};
+};
+
+// Protocol property requirement
+struct ProtocolPropertyReq {
+    std::string name;
+    bool has_getter{true};
+    bool has_setter{false};
+};
+
+// Protocol definition
+struct Protocol {
+    std::string name;
+    std::vector<ProtocolMethodReq> method_requirements;
+    std::vector<ProtocolPropertyReq> property_requirements;
+    std::vector<std::string> inherited_protocols;
+};
+
     // Opcodes
     enum class OpCode : uint8_t {
         // Constants & stack
@@ -76,6 +98,7 @@ struct FunctionPrototype {
         OP_CLASS,              // Create class object
         OP_METHOD,             // Attach method to class on stack
         OP_DEFINE_PROPERTY,    // Register stored property metadata on class
+        OP_DEFINE_COMPUTED_PROPERTY, // Register computed property with getter/setter
         OP_INHERIT,            // Link subclass to superclass
         OP_CALL,
         OP_RETURN,
@@ -105,6 +128,19 @@ struct FunctionPrototype {
         OP_GET_SUBSCRIPT,      // array[index] or dict[key]
         OP_SET_SUBSCRIPT,      // array[index] = value or dict[key] = value
 
+        // Struct operations
+        OP_STRUCT,             // Create struct type object
+        OP_STRUCT_METHOD,      // Attach method to struct (with mutating flag)
+        OP_COPY_VALUE,         // Deep copy struct instance for value semantics
+
+        // Enum operations
+        OP_ENUM,               // Create enum type object
+        OP_ENUM_CASE,          // Define enum case
+
+        // Protocol operations
+        OP_PROTOCOL,           // Create protocol object
+        OP_DEFINE_GLOBAL,      // Define global variable
+
         // Misc
         OP_PRINT,
         OP_HALT,
@@ -117,6 +153,7 @@ struct FunctionPrototype {
         std::vector<Value> constants;
         std::vector<std::string> strings;
         std::vector<FunctionPrototype> functions;
+        std::vector<std::shared_ptr<Protocol>> protocols;
 
         void write(uint8_t byte, uint32_t line);
         void write_op(OpCode op, uint32_t line);
@@ -124,6 +161,7 @@ struct FunctionPrototype {
         size_t add_constant(Value value);
         size_t add_string(const std::string& str);
         size_t add_function(FunctionPrototype proto);
+        size_t add_protocol(std::shared_ptr<Protocol> protocol);
 
         size_t emit_jump(OpCode op, uint32_t line);
         void patch_jump(size_t offset);

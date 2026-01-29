@@ -243,7 +243,13 @@ public:
         Value default_value;
         bool is_let{false};
     };
+    struct ComputedPropertyInfo {
+        std::string name;
+        Value getter;  // Function value
+        Value setter;  // Function value (or nil if read-only)
+    };
     std::vector<PropertyInfo> properties;
+    std::vector<ComputedPropertyInfo> computed_properties;
     ClassObject* superclass{nullptr};
 
     explicit ClassObject(std::string n)
@@ -262,6 +268,10 @@ public:
         for (const auto& prop : properties) {
             total += prop.name.capacity();
             total += sizeof(Value);
+        }
+        for (const auto& comp_prop : computed_properties) {
+            total += comp_prop.name.capacity();
+            total += sizeof(Value) * 2;
         }
         return total;
     }
@@ -289,40 +299,6 @@ public:
     }
 };
 
-class BoundMethodObject : public Object {
-public:
-    InstanceObject* receiver;
-    Value method; // closure/function value
-
-    BoundMethodObject(InstanceObject* recv, Value m)
-        : Object(ObjectType::BoundMethod), receiver(recv), method(m) {}
-
-    std::string to_string() const override {
-        return "<bound method>";
-    }
-
-    size_t memory_size() const override {
-        return sizeof(BoundMethodObject);
-    }
-};
-
-class BuiltinMethodObject : public Object {
-public:
-    Object* target;
-    std::string method_name;
-    
-    BuiltinMethodObject(Object* t, std::string name)
-        : Object(ObjectType::BuiltinMethod), target(t), method_name(std::move(name)) {}
-    
-    std::string to_string() const override {
-        return "<builtin method '" + method_name + "'>";
-    }
-    
-    size_t memory_size() const override {
-        return sizeof(BuiltinMethodObject) + method_name.capacity();
-    }
-};
-
 // Upvalue for captured variables in closures
 class UpvalueObject : public Object {
 public:
@@ -347,16 +323,212 @@ class ClosureObject : public Object {
 public:
     FunctionObject* function;
     std::vector<UpvalueObject*> upvalues;
-    
+
     explicit ClosureObject(FunctionObject* fn)
         : Object(ObjectType::Closure), function(fn) {}
-    
+
     std::string to_string() const override {
         return function ? function->to_string() : "<closure>";
     }
-    
+
     size_t memory_size() const override {
         return sizeof(ClosureObject) + upvalues.capacity() * sizeof(UpvalueObject*);
+    }
+};
+
+// Struct type definition (similar to ClassObject but for value types)
+class StructObject : public Object {
+public:
+    std::string name;
+    std::unordered_map<std::string, Value> methods;  // closures (may include mutating flag info)
+    struct PropertyInfo {
+        std::string name;
+        Value default_value;
+        bool is_let{false};
+    };
+    std::vector<PropertyInfo> properties;
+    std::unordered_map<std::string, bool> mutating_methods;  // method_name -> is_mutating
+
+    explicit StructObject(std::string n)
+        : Object(ObjectType::Struct), name(std::move(n)) {}
+
+    std::string to_string() const override {
+        return "<struct " + name + ">";
+    }
+
+    size_t memory_size() const override {
+        size_t total = sizeof(StructObject) + name.capacity();
+        for (const auto& [k, v] : methods) {
+            total += k.capacity();
+            total += sizeof(Value);
+        }
+        for (const auto& prop : properties) {
+            total += prop.name.capacity();
+            total += sizeof(Value);
+        }
+        return total;
+    }
+};
+
+// Struct instance (value type - should be copied on assignment)
+class StructInstanceObject : public Object {
+public:
+    StructObject* struct_type;
+    std::unordered_map<std::string, Value> fields;
+
+    explicit StructInstanceObject(StructObject* s)
+        : Object(ObjectType::StructInstance), struct_type(s) {}
+
+    // Deep copy for value semantics
+    StructInstanceObject* deep_copy(VM& vm) const;
+
+    std::string to_string() const override {
+        return "<" + (struct_type ? struct_type->name : std::string("struct")) + " instance>";
+    }
+
+    size_t memory_size() const override {
+        size_t total = sizeof(StructInstanceObject);
+        for (const auto& [k, v] : fields) {
+            total += k.capacity();
+            total += sizeof(Value);
+        }
+        return total;
+    }
+};
+
+// Enum type definition (similar to StructObject)
+class EnumObject : public Object {
+public:
+    struct ComputedPropertyInfo {
+        std::string name;
+        Value getter;  // Function/Closure
+        Value setter;  // Function/Closure or null (enum computed properties are read-only)
+    };
+
+    std::string name;
+    std::unordered_map<std::string, Value> methods;  // closures
+    std::unordered_map<std::string, Value> cases;    // case_name -> EnumCaseObject
+    std::vector<ComputedPropertyInfo> computed_properties;
+
+    explicit EnumObject(std::string n)
+        : Object(ObjectType::Enum), name(std::move(n)) {}
+
+    std::string to_string() const override {
+        return "<enum " + name + ">";
+    }
+
+    size_t memory_size() const override {
+        size_t total = sizeof(EnumObject) + name.capacity();
+        for (const auto& [k, v] : methods) {
+            total += k.capacity();
+            total += sizeof(Value);
+        }
+        for (const auto& [k, v] : cases) {
+            total += k.capacity();
+            total += sizeof(Value);
+        }
+        for (const auto& prop : computed_properties) {
+            total += prop.name.capacity();
+            total += sizeof(Value) * 2;  // getter + setter
+        }
+        return total;
+    }
+};
+
+// Enum case instance
+class EnumCaseObject : public Object {
+public:
+    EnumObject* enum_type;
+    std::string case_name;
+    Value raw_value;  // Optional raw value (Int, String, etc.)
+    std::vector<Value> associated_values;  // For associated values
+
+    EnumCaseObject(EnumObject* e, std::string name)
+        : Object(ObjectType::EnumCase), enum_type(e), case_name(std::move(name)), raw_value(Value::null()) {}
+
+    std::string to_string() const override {
+        if (enum_type) {
+            return enum_type->name + "." + case_name;
+        }
+        return case_name;
+    }
+
+    size_t memory_size() const override {
+        size_t total = sizeof(EnumCaseObject) + case_name.capacity();
+        total += associated_values.capacity() * sizeof(Value);
+        return total;
+    }
+};
+
+// Protocol object - defines interface requirements
+class ProtocolObject : public Object {
+public:
+    std::string name;
+    std::vector<std::string> method_requirements;    // Method names that must be implemented
+    std::vector<std::string> property_requirements;  // Property names that must be provided
+
+    explicit ProtocolObject(std::string n)
+        : Object(ObjectType::Protocol), name(std::move(n)) {}
+
+    std::string to_string() const override {
+        return "<protocol " + name + ">";
+    }
+
+    size_t memory_size() const override {
+        size_t total = sizeof(ProtocolObject) + name.capacity();
+        for (const auto& method : method_requirements) {
+            total += method.capacity();
+        }
+        for (const auto& prop : property_requirements) {
+            total += prop.capacity();
+        }
+        return total;
+    }
+};
+
+class BoundMethodObject : public Object {
+public:
+    Object* receiver;  // InstanceObject* or StructInstanceObject*
+    Value method; // closure/function value
+
+    BoundMethodObject(Object* recv, Value m)
+        : Object(ObjectType::BoundMethod), receiver(recv), method(m) {
+    }
+
+    // Convenience constructor for InstanceObject
+    BoundMethodObject(InstanceObject* recv, Value m)
+        : Object(ObjectType::BoundMethod), receiver(static_cast<Object*>(recv)), method(m) {
+    }
+
+    // Convenience constructor for StructInstanceObject
+    BoundMethodObject(StructInstanceObject* recv, Value m)
+        : Object(ObjectType::BoundMethod), receiver(static_cast<Object*>(recv)), method(m) {
+    }
+
+    std::string to_string() const override {
+        return "<bound method>";
+    }
+
+    size_t memory_size() const override {
+        return sizeof(BoundMethodObject);
+    }
+};
+
+class BuiltinMethodObject : public Object {
+public:
+    Object* target;
+    std::string method_name;
+
+    BuiltinMethodObject(Object* t, std::string name)
+        : Object(ObjectType::BuiltinMethod), target(t), method_name(std::move(name)) {
+    }
+
+    std::string to_string() const override {
+        return "<builtin method '" + method_name + "'>";
+    }
+
+    size_t memory_size() const override {
+        return sizeof(BuiltinMethodObject) + method_name.capacity();
     }
 };
 

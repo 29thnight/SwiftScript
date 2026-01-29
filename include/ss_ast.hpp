@@ -24,6 +24,9 @@ struct Expr;
 struct Stmt;
 struct FuncDeclStmt;
 struct ClassDeclStmt;
+struct StructDeclStmt;
+struct StructMethodDecl;
+struct EnumDeclStmt;
 
 using ExprPtr = std::unique_ptr<Expr>;
 using StmtPtr = std::unique_ptr<Stmt>;
@@ -218,16 +221,20 @@ enum class StmtKind {
     Block,
     VarDecl,
     ClassDecl,
+    StructDecl,  // Struct declaration
+    EnumDecl,    // Enum declaration
+    ProtocolDecl, // Protocol declaration
     If,
     IfLet,
     GuardLet,
     While,
-    ForIn,      // �߰�
-    Break,      // �߰�
-    Continue,   // �߰�
-    Switch,     // �߰�
+    ForIn,      // for-in loop
+    Break,
+    Continue,
+    Switch,
     Return,
     FuncDecl,
+    Import,     // Import statement
 };
 
 struct Stmt {
@@ -260,6 +267,12 @@ struct VarDeclStmt : Stmt {
     std::optional<TypeAnnotation> type_annotation;
     ExprPtr initializer;
     bool is_let{false};
+    
+    // Computed property support
+    bool is_computed{false};
+    std::unique_ptr<BlockStmt> getter_body;
+    std::unique_ptr<BlockStmt> setter_body;
+    
     VarDeclStmt() : Stmt(StmtKind::VarDecl) {}
 };
 
@@ -346,10 +359,86 @@ struct FuncDeclStmt : Stmt {
 struct ClassDeclStmt : Stmt {
     std::string name;
     std::optional<std::string> superclass_name;
+    std::vector<std::string> protocol_conformances;  // Protocols this class conforms to
     std::vector<std::unique_ptr<FuncDeclStmt>> methods;
     std::vector<std::unique_ptr<VarDeclStmt>> properties;
     std::unique_ptr<BlockStmt> deinit_body;  // Optional deinit
     ClassDeclStmt() : Stmt(StmtKind::ClassDecl) {}
 };
 
+// Struct method declaration with mutating flag
+struct StructMethodDecl {
+    std::string name;
+    std::vector<std::pair<std::string, TypeAnnotation>> params;
+    std::unique_ptr<BlockStmt> body;
+    std::optional<TypeAnnotation> return_type;
+    bool is_mutating{false};  // mutating methods can modify self
+    bool is_computed_property{false};  // true for var name: Type { }, false for func name()
+};
+
+// Struct declaration: struct Point { var x: Int; func distance() -> Float { ... } }
+struct StructDeclStmt : Stmt {
+    std::string name;
+    std::vector<std::string> protocol_conformances;  // Protocols this struct conforms to
+    std::vector<std::unique_ptr<VarDeclStmt>> properties;  // Stored properties
+    std::vector<std::unique_ptr<StructMethodDecl>> methods;
+    std::vector<std::unique_ptr<FuncDeclStmt>> initializers;  // init methods
+
+    StructDeclStmt() : Stmt(StmtKind::StructDecl) {}
+};
+
+// Enum case declaration
+struct EnumCaseDecl {
+    std::string name;
+    std::optional<Value> raw_value;  // For raw value enums (Int, String, etc.)
+    // For associated values (future extension)
+    std::vector<std::pair<std::string, TypeAnnotation>> associated_values;
+};
+
+// Enum declaration: enum Direction { case north; case south }
+struct EnumDeclStmt : Stmt {
+    std::string name;
+    std::vector<EnumCaseDecl> cases;
+    std::optional<TypeAnnotation> raw_type;  // Type of raw values (if any)
+    std::vector<std::unique_ptr<StructMethodDecl>> methods;  // Methods and computed properties
+
+    EnumDeclStmt() : Stmt(StmtKind::EnumDecl) {}
+};
+
+// Import statement: import "module.ss"
+struct ImportStmt : Stmt {
+    std::string module_path;  // Path to the module file
+    
+    ImportStmt() : Stmt(StmtKind::Import) {}
+    explicit ImportStmt(std::string path) 
+        : Stmt(StmtKind::Import), module_path(std::move(path)) {}
+};
+
+// Protocol method requirement
+struct ProtocolMethodRequirement {
+    std::string name;
+    std::vector<std::pair<std::string, TypeAnnotation>> params;
+    std::optional<TypeAnnotation> return_type;
+    bool is_mutating{false};
+};
+
+// Protocol property requirement
+struct ProtocolPropertyRequirement {
+    std::string name;
+    TypeAnnotation type;
+    bool has_getter{true};
+    bool has_setter{false};  // true for { get set }, false for { get }
+};
+
+// Protocol declaration: protocol Drawable { func draw(); var size: Int { get set } }
+struct ProtocolDeclStmt : Stmt {
+    std::string name;
+    std::vector<ProtocolMethodRequirement> method_requirements;
+    std::vector<ProtocolPropertyRequirement> property_requirements;
+    std::vector<std::string> inherited_protocols;  // Protocol inheritance
+
+    ProtocolDeclStmt() : Stmt(StmtKind::ProtocolDecl) {}
+};
+
 } // namespace swiftscript
+

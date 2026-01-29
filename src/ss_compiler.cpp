@@ -1,7 +1,11 @@
 #include "ss_compiler.hpp"
+#include "ss_lexer.hpp"
+#include "ss_parser.hpp"
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <fstream>
+#include <sstream>
 
 namespace swiftscript {
 
@@ -55,6 +59,9 @@ void Compiler::compile_stmt(Stmt* stmt) {
         case StmtKind::ClassDecl:
             visit(static_cast<ClassDeclStmt*>(stmt));
             break;
+        case StmtKind::Import:
+            visit(static_cast<ImportStmt*>(stmt));
+            break;
         case StmtKind::Return:
             visit(static_cast<ReturnStmt*>(stmt));
             break;
@@ -75,6 +82,15 @@ void Compiler::compile_stmt(Stmt* stmt) {
             break;
         case StmtKind::Switch:
             visit(static_cast<SwitchStmt*>(stmt));
+            break;
+        case StmtKind::StructDecl:
+            visit(static_cast<StructDeclStmt*>(stmt));
+            break;
+        case StmtKind::EnumDecl:
+            visit(static_cast<EnumDeclStmt*>(stmt));
+            break;
+        case StmtKind::ProtocolDecl:
+            visit(static_cast<ProtocolDeclStmt*>(stmt));
             break;
         default:
             throw CompilerError("Unknown statement kind", stmt->line);
@@ -112,22 +128,104 @@ void Compiler::visit(ClassDeclStmt* stmt) {
         property_lookup.insert(property->name);
     }
 
-    // Stored properties
+    // Stored and computed properties
     for (const auto& property : stmt->properties) {
-        if (property->initializer) {
-            compile_expr(property->initializer.get());
+        if (property->is_computed) {
+            // Computed property: compile getter and setter as functions
+            size_t property_name_idx = identifier_constant(property->name);
+            if (property_name_idx > std::numeric_limits<uint16_t>::max()) {
+                throw CompilerError("Too many property identifiers", property->line);
+            }
+            
+            // Compile getter
+            FunctionPrototype getter_proto;
+            getter_proto.name = "get:" + property->name;
+            getter_proto.params.push_back("self");
+            getter_proto.chunk = std::make_shared<Chunk>();
+            
+            Compiler getter_compiler;
+            getter_compiler.chunk_ = Chunk{};
+            getter_compiler.locals_.clear();
+            getter_compiler.scope_depth_ = 1;
+            getter_compiler.recursion_depth_ = 0;
+            getter_compiler.current_class_properties_ = &property_lookup;
+            getter_compiler.allow_implicit_self_property_ = true;
+            
+            // Add 'self' as local
+            getter_compiler.declare_local("self", false);
+            getter_compiler.mark_local_initialized();
+            
+            // Compile getter body
+            for (const auto& stmt_in_getter : property->getter_body->statements) {
+                getter_compiler.compile_stmt(stmt_in_getter.get());
+            }
+            
+            // Implicit return nil if no explicit return
+            getter_compiler.emit_op(OpCode::OP_NIL, property->line);
+            getter_compiler.emit_op(OpCode::OP_RETURN, property->line);
+            
+            getter_proto.chunk = std::make_shared<Chunk>(std::move(getter_compiler.chunk_));
+            size_t getter_idx = chunk_.add_function(std::move(getter_proto));
+            
+            // Compile setter (if present)
+            size_t setter_idx = 0xFFFF;
+            if (property->setter_body) {
+                FunctionPrototype setter_proto;
+                setter_proto.name = "set:" + property->name;
+                setter_proto.params.push_back("self");
+                setter_proto.params.push_back("newValue");
+                setter_proto.chunk = std::make_shared<Chunk>();
+                
+                Compiler setter_compiler;
+                setter_compiler.chunk_ = Chunk{};
+                setter_compiler.locals_.clear();
+                setter_compiler.scope_depth_ = 1;
+                setter_compiler.recursion_depth_ = 0;
+                setter_compiler.current_class_properties_ = &property_lookup;
+                setter_compiler.allow_implicit_self_property_ = true;
+                
+                // Add 'self' and 'newValue' as locals
+                setter_compiler.declare_local("self", false);
+                setter_compiler.mark_local_initialized();
+                setter_compiler.declare_local("newValue", false);
+                setter_compiler.mark_local_initialized();
+                
+                // Compile setter body
+                for (const auto& stmt_in_setter : property->setter_body->statements) {
+                    setter_compiler.compile_stmt(stmt_in_setter.get());
+                }
+                
+                // Return newValue (parameter 1, after self which is parameter 0)
+                setter_compiler.emit_op(OpCode::OP_GET_LOCAL, property->line);
+                setter_compiler.emit_short(1, property->line);  // newValue is at local index 1
+                setter_compiler.emit_op(OpCode::OP_RETURN, property->line);
+                
+                setter_proto.chunk = std::make_shared<Chunk>(std::move(setter_compiler.chunk_));
+                setter_idx = chunk_.add_function(std::move(setter_proto));
+            }
+            
+            // Emit computed property definition
+            emit_op(OpCode::OP_DEFINE_COMPUTED_PROPERTY, property->line);
+            emit_short(static_cast<uint16_t>(property_name_idx), property->line);
+            emit_short(static_cast<uint16_t>(getter_idx), property->line);
+            emit_short(static_cast<uint16_t>(setter_idx), property->line);
         } else {
-            emit_op(OpCode::OP_NIL, property->line);
-        }
+            // Stored property
+            if (property->initializer) {
+                compile_expr(property->initializer.get());
+            } else {
+                emit_op(OpCode::OP_NIL, property->line);
+            }
 
-        size_t property_name_idx = identifier_constant(property->name);
-        if (property_name_idx > std::numeric_limits<uint16_t>::max()) {
-            throw CompilerError("Too many property identifiers", property->line);
-        }
+            size_t property_name_idx = identifier_constant(property->name);
+            if (property_name_idx > std::numeric_limits<uint16_t>::max()) {
+                throw CompilerError("Too many property identifiers", property->line);
+            }
 
-        emit_op(OpCode::OP_DEFINE_PROPERTY, property->line);
-        emit_short(static_cast<uint16_t>(property_name_idx), property->line);
-        emit_byte(property->is_let ? 1 : 0, property->line);
+            emit_op(OpCode::OP_DEFINE_PROPERTY, property->line);
+            emit_short(static_cast<uint16_t>(property_name_idx), property->line);
+            emit_byte(property->is_let ? 1 : 0, property->line);
+        }
     }
 
     // Methods: class object remains on stack top
@@ -249,6 +347,366 @@ void Compiler::visit(ClassDeclStmt* stmt) {
         emit_short(static_cast<uint16_t>(deinit_name_idx), stmt->line);
     }
 
+    if (scope_depth_ == 0) {
+        emit_op(OpCode::OP_SET_GLOBAL, stmt->line);
+        emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+    } else {
+        int local = resolve_local(stmt->name);
+        emit_op(OpCode::OP_SET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(local), stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+    }
+}
+
+void Compiler::visit(StructDeclStmt* stmt) {
+    size_t name_idx = identifier_constant(stmt->name);
+
+    // Emit OP_STRUCT to create struct type object
+    emit_op(OpCode::OP_STRUCT, stmt->line);
+    emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+
+    if (scope_depth_ > 0) {
+        declare_local(stmt->name, false);
+        mark_local_initialized();
+    }
+
+    // Collect property names for implicit self access
+    std::vector<std::string> property_names;
+    std::unordered_set<std::string> property_lookup;
+    property_names.reserve(stmt->properties.size());
+    for (const auto& property : stmt->properties) {
+        property_names.push_back(property->name);
+        property_lookup.insert(property->name);
+    }
+
+    // Define stored properties
+    for (const auto& property : stmt->properties) {
+        if (property->initializer) {
+            compile_expr(property->initializer.get());
+        } else {
+            emit_op(OpCode::OP_NIL, property->line);
+        }
+
+        size_t property_name_idx = identifier_constant(property->name);
+        if (property_name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many property identifiers", property->line);
+        }
+
+        emit_op(OpCode::OP_DEFINE_PROPERTY, property->line);
+        emit_short(static_cast<uint16_t>(property_name_idx), property->line);
+        emit_byte(property->is_let ? 1 : 0, property->line);
+    }
+
+    // Compile methods
+    for (const auto& method : stmt->methods) {
+        FunctionPrototype proto;
+        proto.name = method->name;
+        proto.params.reserve(method->params.size() + 1);
+        proto.params.push_back("self");  // Implicit self parameter
+        for (const auto& [param_name, param_type] : method->params) {
+            proto.params.push_back(param_name);
+        }
+        proto.is_initializer = false;
+        proto.is_override = false;
+
+        Compiler method_compiler;
+        method_compiler.enclosing_ = this;
+        method_compiler.chunk_ = Chunk{};
+        method_compiler.locals_.clear();
+        method_compiler.scope_depth_ = 1;
+        method_compiler.recursion_depth_ = 0;
+        method_compiler.current_class_properties_ = &property_lookup;
+        method_compiler.allow_implicit_self_property_ = true;
+        method_compiler.in_struct_method_ = true;
+        method_compiler.in_mutating_method_ = method->is_mutating;
+
+        // Implicit self
+        method_compiler.declare_local("self", false);
+        method_compiler.mark_local_initialized();
+
+        for (const auto& [param_name, param_type] : method->params) {
+            method_compiler.declare_local(param_name, param_type.is_optional);
+            method_compiler.mark_local_initialized();
+        }
+
+        if (method->body) {
+            for (const auto& statement : method->body->statements) {
+                method_compiler.compile_stmt(statement.get());
+            }
+        }
+
+        method_compiler.emit_op(OpCode::OP_NIL, stmt->line);
+        method_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+        proto.chunk = std::make_shared<Chunk>(std::move(method_compiler.chunk_));
+        proto.upvalues.reserve(method_compiler.upvalues_.size());
+        for (const auto& uv : method_compiler.upvalues_) {
+            proto.upvalues.push_back({uv.index, uv.is_local});
+        }
+
+        size_t function_index = chunk_.add_function(std::move(proto));
+        if (function_index > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many functions in chunk", stmt->line);
+        }
+
+        bool has_captures = !method_compiler.upvalues_.empty();
+        emit_op(has_captures ? OpCode::OP_CLOSURE : OpCode::OP_FUNCTION, stmt->line);
+        emit_short(static_cast<uint16_t>(function_index), stmt->line);
+
+        size_t method_name_idx = identifier_constant(method->name);
+        if (method_name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many method identifiers", stmt->line);
+        }
+
+        // Use OP_STRUCT_METHOD with mutating flag
+        emit_op(OpCode::OP_STRUCT_METHOD, stmt->line);
+        emit_short(static_cast<uint16_t>(method_name_idx), stmt->line);
+        emit_byte(method->is_mutating ? 1 : 0, stmt->line);
+    }
+
+    // Compile initializers
+    for (const auto& init_method : stmt->initializers) {
+        FunctionPrototype proto;
+        proto.name = "init";
+        proto.params.reserve(init_method->params.size() + 1);
+        proto.params.push_back("self");
+        for (const auto& [param_name, param_type] : init_method->params) {
+            proto.params.push_back(param_name);
+        }
+        proto.is_initializer = true;
+        proto.is_override = false;
+
+        Compiler init_compiler;
+        init_compiler.enclosing_ = this;
+        init_compiler.chunk_ = Chunk{};
+        init_compiler.locals_.clear();
+        init_compiler.scope_depth_ = 1;
+        init_compiler.recursion_depth_ = 0;
+        init_compiler.current_class_properties_ = &property_lookup;
+        init_compiler.allow_implicit_self_property_ = true;
+        init_compiler.in_struct_method_ = true;
+        init_compiler.in_mutating_method_ = true;  // init can always modify self
+
+        // Implicit self
+        init_compiler.declare_local("self", false);
+        init_compiler.mark_local_initialized();
+
+        for (const auto& [param_name, param_type] : init_method->params) {
+            init_compiler.declare_local(param_name, param_type.is_optional);
+            init_compiler.mark_local_initialized();
+        }
+
+        if (init_method->body) {
+            for (const auto& statement : init_method->body->statements) {
+                init_compiler.compile_stmt(statement.get());
+            }
+        }
+
+        init_compiler.emit_op(OpCode::OP_NIL, init_method->line);
+        init_compiler.emit_op(OpCode::OP_RETURN, init_method->line);
+
+        proto.chunk = std::make_shared<Chunk>(std::move(init_compiler.chunk_));
+        proto.upvalues.reserve(init_compiler.upvalues_.size());
+        for (const auto& uv : init_compiler.upvalues_) {
+            proto.upvalues.push_back({uv.index, uv.is_local});
+        }
+
+        size_t function_index = chunk_.add_function(std::move(proto));
+        if (function_index > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many functions in chunk", init_method->line);
+        }
+
+        bool has_captures = !init_compiler.upvalues_.empty();
+        emit_op(has_captures ? OpCode::OP_CLOSURE : OpCode::OP_FUNCTION, init_method->line);
+        emit_short(static_cast<uint16_t>(function_index), init_method->line);
+
+        size_t method_name_idx = identifier_constant("init");
+        if (method_name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many method identifiers", init_method->line);
+        }
+
+        emit_op(OpCode::OP_STRUCT_METHOD, init_method->line);
+        emit_short(static_cast<uint16_t>(method_name_idx), init_method->line);
+        emit_byte(1, init_method->line);  // init is always mutating
+    }
+
+    // Store struct in variable
+    if (scope_depth_ == 0) {
+        emit_op(OpCode::OP_SET_GLOBAL, stmt->line);
+        emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+    } else {
+        int local = resolve_local(stmt->name);
+        emit_op(OpCode::OP_SET_LOCAL, stmt->line);
+        emit_short(static_cast<uint16_t>(local), stmt->line);
+        emit_op(OpCode::OP_POP, stmt->line);
+    }
+}
+
+
+void Compiler::visit(EnumDeclStmt* stmt) {
+    size_t name_idx = identifier_constant(stmt->name);
+
+    // Emit OP_ENUM to create enum type object
+    emit_op(OpCode::OP_ENUM, stmt->line);
+    emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+
+    if (scope_depth_ > 0) {
+        declare_local(stmt->name, false);
+        mark_local_initialized();
+    }
+
+    // Define enum cases
+    for (const auto& case_decl : stmt->cases) {
+        size_t case_name_idx = identifier_constant(case_decl.name);
+        if (case_name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many enum case identifiers", stmt->line);
+        }
+
+        // Push raw value if present
+        if (case_decl.raw_value.has_value()) {
+            emit_constant(case_decl.raw_value.value(), stmt->line);
+        } else {
+            emit_op(OpCode::OP_NIL, stmt->line);
+        }
+
+        // Define the enum case
+        emit_op(OpCode::OP_ENUM_CASE, stmt->line);
+        emit_short(static_cast<uint16_t>(case_name_idx), stmt->line);
+        
+        // For associated values (if any), store their count
+        emit_byte(static_cast<uint8_t>(case_decl.associated_values.size()), stmt->line);
+    }
+
+    // Collect property names for implicit self access (for methods)
+    std::unordered_set<std::string> property_lookup;
+
+    // PASS 1: Compile computed properties first (like Class does)
+    for (const auto& method : stmt->methods) {
+        if (!method->is_computed_property) continue;
+        
+        // Computed property: var description: String { ... }
+        size_t property_name_idx = identifier_constant(method->name);
+        if (property_name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many property identifiers", stmt->line);
+        }
+        
+        // Compile getter
+        FunctionPrototype getter_proto;
+        getter_proto.name = "get:" + method->name;
+        getter_proto.params.push_back("self");
+        
+        Compiler getter_compiler;
+        getter_compiler.enclosing_ = this;
+        getter_compiler.chunk_ = Chunk{};
+        getter_compiler.locals_.clear();
+        getter_compiler.scope_depth_ = 1;
+        getter_compiler.recursion_depth_ = 0;
+        getter_compiler.current_class_properties_ = &property_lookup;
+        getter_compiler.allow_implicit_self_property_ = true;
+        
+        // Add 'self' as local
+        getter_compiler.declare_local("self", false);
+        getter_compiler.mark_local_initialized();
+        
+        // Compile getter body
+        if (method->body) {
+            for (const auto& statement : method->body->statements) {
+                getter_compiler.compile_stmt(statement.get());
+            }
+        }
+        
+        // Implicit return nil if no explicit return
+        getter_compiler.emit_op(OpCode::OP_NIL, stmt->line);
+        getter_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+        
+        getter_proto.chunk = std::make_shared<Chunk>(std::move(getter_compiler.chunk_));
+        getter_proto.upvalues.reserve(getter_compiler.upvalues_.size());
+        for (const auto& uv : getter_compiler.upvalues_) {
+            getter_proto.upvalues.push_back({uv.index, uv.is_local});
+        }
+        
+        size_t getter_idx = chunk_.add_function(std::move(getter_proto));
+        
+        // Enum computed properties are read-only (no setter)
+        size_t setter_idx = 0xFFFF;
+        
+        // Emit computed property definition
+        emit_op(OpCode::OP_DEFINE_COMPUTED_PROPERTY, stmt->line);
+        emit_short(static_cast<uint16_t>(property_name_idx), stmt->line);
+        emit_short(static_cast<uint16_t>(getter_idx), stmt->line);
+        emit_short(static_cast<uint16_t>(setter_idx), stmt->line);
+    }
+
+    // PASS 2: Compile methods (like Class does)
+    for (const auto& method : stmt->methods) {
+        if (method->is_computed_property) continue;
+        
+        // Regular method: func describe() -> String { ... }
+        FunctionPrototype proto;
+        proto.name = method->name;
+        proto.params.reserve(method->params.size() + 1);
+        proto.params.push_back("self");  // Implicit self parameter
+        for (const auto& [param_name, param_type] : method->params) {
+            proto.params.push_back(param_name);
+        }
+        proto.is_initializer = false;
+        proto.is_override = false;
+
+        Compiler method_compiler;
+        method_compiler.enclosing_ = this;
+        method_compiler.chunk_ = Chunk{};
+        method_compiler.locals_.clear();
+        method_compiler.scope_depth_ = 1;
+        method_compiler.recursion_depth_ = 0;
+        method_compiler.current_class_properties_ = &property_lookup;
+        method_compiler.allow_implicit_self_property_ = true;
+
+        // Implicit self
+        method_compiler.declare_local("self", false);
+        method_compiler.mark_local_initialized();
+
+        for (const auto& [param_name, param_type] : method->params) {
+            method_compiler.declare_local(param_name, param_type.is_optional);
+            method_compiler.mark_local_initialized();
+        }
+
+        if (method->body) {
+            for (const auto& statement : method->body->statements) {
+                method_compiler.compile_stmt(statement.get());
+            }
+        }
+
+        method_compiler.emit_op(OpCode::OP_NIL, stmt->line);
+        method_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+        proto.chunk = std::make_shared<Chunk>(std::move(method_compiler.chunk_));
+        proto.upvalues.reserve(method_compiler.upvalues_.size());
+        for (const auto& uv : method_compiler.upvalues_) {
+            proto.upvalues.push_back({uv.index, uv.is_local});
+        }
+
+        size_t function_index = chunk_.add_function(std::move(proto));
+        if (function_index > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many functions in chunk", stmt->line);
+        }
+
+        bool has_captures = !method_compiler.upvalues_.empty();
+        emit_op(has_captures ? OpCode::OP_CLOSURE : OpCode::OP_FUNCTION, stmt->line);
+        emit_short(static_cast<uint16_t>(function_index), stmt->line);
+
+        size_t method_name_idx = identifier_constant(method->name);
+        if (method_name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many method identifiers", stmt->line);
+        }
+
+        // Use OP_METHOD for enum methods
+        emit_op(OpCode::OP_METHOD, stmt->line);
+        emit_short(static_cast<uint16_t>(method_name_idx), stmt->line);
+    }
+
+    // Store enum in variable
     if (scope_depth_ == 0) {
         emit_op(OpCode::OP_SET_GLOBAL, stmt->line);
         emit_short(static_cast<uint16_t>(name_idx), stmt->line);
@@ -758,6 +1216,114 @@ void Compiler::visit(SwitchStmt* stmt) {
     end_scope();  // Pops $switch value
 }
 
+void Compiler::visit(ImportStmt* stmt) {
+    // Check for circular dependency
+    if (compiling_modules_.find(stmt->module_path) != compiling_modules_.end()) {
+        throw CompilerError("Circular import detected: " + stmt->module_path, stmt->line);
+    }
+    
+    // Check if already imported
+    if (imported_modules_.find(stmt->module_path) != imported_modules_.end()) {
+        // Module already imported, skip
+        return;
+    }
+    
+    // Mark as imported
+    imported_modules_.insert(stmt->module_path);
+    compiling_modules_.insert(stmt->module_path);
+    
+    try {
+        // Load and parse the imported module
+        std::string full_path = stmt->module_path;
+        if (!base_directory_.empty() && stmt->module_path[0] != '/' && stmt->module_path[0] != '\\') {
+            // Resolve relative path
+            full_path = base_directory_ + "/" + stmt->module_path;
+        }
+        
+        // Read the file content
+        std::ifstream file(full_path);
+        if (!file.is_open()) {
+            throw CompilerError("Cannot open import file: " + full_path, stmt->line);
+        }
+        
+        std::string source((std::istreambuf_iterator<char>(file)),
+                          std::istreambuf_iterator<char>());
+        file.close();
+        
+        // Tokenize and parse the imported module
+        Lexer lexer(source);
+        auto tokens = lexer.tokenize_all();
+        Parser parser(std::move(tokens));
+        auto imported_program = parser.parse();
+        
+        // Compile the imported module statements into current chunk
+        for (const auto& imported_stmt : imported_program) {
+            if (imported_stmt) {
+                compile_stmt(imported_stmt.get());
+            }
+        }
+        
+        // Remove from compiling set
+        compiling_modules_.erase(stmt->module_path);
+        
+    } catch (const std::exception& e) {
+        compiling_modules_.erase(stmt->module_path);
+        throw CompilerError("Error importing module '" + stmt->module_path + "': " + e.what(), stmt->line);
+    }
+}
+
+void Compiler::visit(ProtocolDeclStmt* stmt) {
+    // Protocols are a compile-time/type-system feature
+    // At runtime, we store protocol definitions as metadata
+    // For now, we'll create a protocol object that stores requirements
+    
+    // Create protocol metadata
+    auto protocol = std::make_shared<Protocol>();
+    protocol->name = stmt->name;
+    
+    // Store method requirements
+    for (const auto& method_req : stmt->method_requirements) {
+        ProtocolMethodReq req;
+        req.name = method_req.name;
+        req.is_mutating = method_req.is_mutating;
+        for (const auto& [param_name, param_type] : method_req.params) {
+            req.param_names.push_back(param_name);
+        }
+        protocol->method_requirements.push_back(req);
+    }
+    
+    // Store property requirements
+    for (const auto& prop_req : stmt->property_requirements) {
+        ProtocolPropertyReq req;
+        req.name = prop_req.name;
+        req.has_getter = prop_req.has_getter;
+        req.has_setter = prop_req.has_setter;
+        protocol->property_requirements.push_back(req);
+    }
+    
+    // Store inherited protocols
+    protocol->inherited_protocols = stmt->inherited_protocols;
+    
+    // Add protocol to constants as a protocol value
+    size_t protocol_idx = chunk_.add_protocol(protocol);
+    if (protocol_idx > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many protocols in chunk", stmt->line);
+    }
+    
+    // Define protocol in global scope
+    emit_op(OpCode::OP_PROTOCOL, stmt->line);
+    emit_short(static_cast<uint16_t>(protocol_idx), stmt->line);
+    
+    if (scope_depth_ == 0) {
+        size_t name_idx = identifier_constant(stmt->name);
+        emit_op(OpCode::OP_DEFINE_GLOBAL, stmt->line);
+        emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+    } else {
+        declare_local(stmt->name, false);
+        mark_local_initialized();
+    }
+}
+
 void Compiler::visit(BlockStmt* stmt) {
     begin_scope();
     for (const auto& statement : stmt->statements) {
@@ -904,6 +1470,26 @@ void Compiler::visit(UnaryExpr* expr) {
 }
 
 void Compiler::visit(BinaryExpr* expr) {
+    // Special case: member assignment (obj.prop = value)
+    if (expr->op == TokenType::Equal && expr->left->kind == ExprKind::Member) {
+        auto* member = static_cast<MemberExpr*>(expr->left.get());
+        
+        // Compile object
+        compile_expr(member->object.get());
+        
+        // Compile value
+        compile_expr(expr->right.get());
+        
+        // Emit SET_PROPERTY
+        size_t name_idx = identifier_constant(member->member);
+        if (name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many identifiers", expr->line);
+        }
+        emit_op(OpCode::OP_SET_PROPERTY, expr->line);
+        emit_short(static_cast<uint16_t>(name_idx), expr->line);
+        return;
+    }
+    
     compile_expr(expr->left.get());
     compile_expr(expr->right.get());
 
@@ -1501,6 +2087,35 @@ Chunk Compiler::compile_function_body(const FuncDeclStmt& stmt) {
     function_compiler.emit_op(OpCode::OP_NIL, stmt.line);
     function_compiler.emit_op(OpCode::OP_RETURN, stmt.line);
     return std::move(function_compiler.chunk_);
+}
+
+Chunk Compiler::compile_struct_method_body(const StructMethodDecl& method, bool is_mutating) {
+    Compiler method_compiler;
+    method_compiler.chunk_ = Chunk{};
+    method_compiler.locals_.clear();
+    method_compiler.scope_depth_ = 1;
+    method_compiler.recursion_depth_ = 0;
+    method_compiler.in_struct_method_ = true;
+    method_compiler.in_mutating_method_ = is_mutating;
+
+    // self is implicit first parameter
+    method_compiler.declare_local("self", false);
+    method_compiler.mark_local_initialized();
+
+    for (const auto& [param_name, param_type] : method.params) {
+        method_compiler.declare_local(param_name, param_type.is_optional);
+        method_compiler.mark_local_initialized();
+    }
+
+    if (method.body) {
+        for (const auto& statement : method.body->statements) {
+            method_compiler.compile_stmt(statement.get());
+        }
+    }
+
+    method_compiler.emit_op(OpCode::OP_NIL, 0);
+    method_compiler.emit_op(OpCode::OP_RETURN, 0);
+    return std::move(method_compiler.chunk_);
 }
 
 } // namespace swiftscript

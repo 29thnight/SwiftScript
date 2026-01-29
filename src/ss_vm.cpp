@@ -641,47 +641,59 @@ namespace swiftscript {
                         throw std::runtime_error("Stack underflow on method definition.");
                     }
                     Value method_val = pop();
-                    Value class_val = peek(0);
-                    if (!class_val.is_object() || !class_val.as_object() || class_val.as_object()->type != ObjectType::Class) {
-                        throw std::runtime_error("OP_METHOD expects class on stack.");
+                    Value type_val = peek(0);
+                    
+                    if (!type_val.is_object() || !type_val.as_object()) {
+                        throw std::runtime_error("OP_METHOD expects class or enum on stack.");
                     }
                     if (name_idx >= chunk_->strings.size()) {
                         throw std::runtime_error("Method name index out of range.");
                     }
-                    auto* klass = static_cast<ClassObject*>(class_val.as_object());
+                    
+                    Object* type_obj = type_val.as_object();
                     const std::string& name = chunk_->strings[name_idx];
+                    
+                    // Handle ClassObject
+                    if (type_obj->type == ObjectType::Class) {
+                        auto* klass = static_cast<ClassObject*>(type_obj);
 
-                    // Get function prototype to check is_override flag
-                    FunctionObject* func = nullptr;
-                    if (method_val.is_object() && method_val.as_object()) {
-                        Object* obj = method_val.as_object();
-                        if (obj->type == ObjectType::Closure) {
-                            func = static_cast<ClosureObject*>(obj)->function;
-                        } else if (obj->type == ObjectType::Function) {
-                            func = static_cast<FunctionObject*>(obj);
+                        // Get function prototype to check is_override flag
+                        FunctionObject* func = nullptr;
+                        if (method_val.is_object() && method_val.as_object()) {
+                            Object* obj = method_val.as_object();
+                            if (obj->type == ObjectType::Closure) {
+                                func = static_cast<ClosureObject*>(obj)->function;
+                            } else if (obj->type == ObjectType::Function) {
+                                func = static_cast<FunctionObject*>(obj);
+                            }
                         }
+
+                        // Validate override usage
+                        if (func && klass->superclass) {
+                            Value parent_method;
+                            bool parent_has_method = find_method_on_class(klass->superclass, name, parent_method);
+                            
+                            bool is_override = func->is_override;
+                            
+                            if (parent_has_method && !is_override && name != "init") {
+                                throw std::runtime_error("Method '" + name + "' overrides a superclass method but is not marked with 'override'");
+                            }
+                            
+                            if (!parent_has_method && is_override) {
+                                throw std::runtime_error("Method '" + name + "' marked with 'override' but does not override any superclass method");
+                            }
+                        }
+
+                        klass->methods[name] = method_val;
                     }
-
-                    // Validate override usage
-                    if (func && klass->superclass) {
-                        Value parent_method;
-                        bool parent_has_method = find_method_on_class(klass->superclass, name, parent_method);
-                        
-                        // Check in function chunk's functions array for is_override flag
-                        // Since we're in OP_METHOD right after OP_FUNCTION/OP_CLOSURE, the function was just created
-                        // We need to get is_override from the FunctionPrototype
-                        bool is_override = func->is_override;
-                        
-                        if (parent_has_method && !is_override && name != "init") {
-                            throw std::runtime_error("Method '" + name + "' overrides a superclass method but is not marked with 'override'");
-                        }
-                        
-                        if (!parent_has_method && is_override) {
-                            throw std::runtime_error("Method '" + name + "' marked with 'override' but does not override any superclass method");
-                        }
+                    // Handle EnumObject
+                    else if (type_obj->type == ObjectType::Enum) {
+                        auto* enum_type = static_cast<EnumObject*>(type_obj);
+                        enum_type->methods[name] = method_val;
                     }
-
-                    klass->methods[name] = method_val;
+                    else {
+                        throw std::runtime_error("OP_METHOD expects class or enum on stack.");
+                    }
                     break;
                 }
                 case OpCode::OP_DEFINE_PROPERTY: {
@@ -696,19 +708,110 @@ namespace swiftscript {
                         RC::retain(default_value.as_object());
                     }
                     pop();
-                    Value class_val = peek(0);
-                    if (!class_val.is_object() || !class_val.as_object() || class_val.as_object()->type != ObjectType::Class) {
-                        throw std::runtime_error("OP_DEFINE_PROPERTY expects class on stack.");
+                    Value type_val = peek(0);
+                    if (!type_val.is_object() || !type_val.as_object()) {
+                        throw std::runtime_error("OP_DEFINE_PROPERTY expects class or struct on stack.");
                     }
                     if (name_idx >= chunk_->strings.size()) {
                         throw std::runtime_error("Property name index out of range.");
                     }
-                    auto* klass = static_cast<ClassObject*>(class_val.as_object());
-                    ClassObject::PropertyInfo info;
-                    info.name = chunk_->strings[name_idx];
-                    info.default_value = default_value;
-                    info.is_let = is_let;
-                    klass->properties.push_back(std::move(info));
+                    Object* type_obj = type_val.as_object();
+                    if (type_obj->type == ObjectType::Class) {
+                        auto* klass = static_cast<ClassObject*>(type_obj);
+                        ClassObject::PropertyInfo info;
+                        info.name = chunk_->strings[name_idx];
+                        info.default_value = default_value;
+                        info.is_let = is_let;
+                        klass->properties.push_back(std::move(info));
+                    } else if (type_obj->type == ObjectType::Struct) {
+                        auto* struct_type = static_cast<StructObject*>(type_obj);
+                        StructObject::PropertyInfo info;
+                        info.name = chunk_->strings[name_idx];
+                        info.default_value = default_value;
+                        info.is_let = is_let;
+                        struct_type->properties.push_back(std::move(info));
+                    } else {
+                        throw std::runtime_error("OP_DEFINE_PROPERTY expects class or struct on stack.");
+                    }
+                    break;
+                }
+                case OpCode::OP_DEFINE_COMPUTED_PROPERTY: {
+                    // Stack: [... class]
+                    // Read: property_name_idx, getter_idx, setter_idx
+                    uint16_t name_idx = read_short();
+                    uint16_t getter_idx = read_short();
+                    uint16_t setter_idx = read_short();
+                    
+                    Value type_val = peek(0);
+                    if (!type_val.is_object() || !type_val.as_object()) {
+                        throw std::runtime_error("OP_DEFINE_COMPUTED_PROPERTY expects class or enum on stack.");
+                    }
+                    if (name_idx >= chunk_->strings.size()) {
+                        throw std::runtime_error("Property name index out of range.");
+                    }
+                    if (getter_idx >= chunk_->functions.size()) {
+                        throw std::runtime_error("Getter function index out of range.");
+                    }
+                    
+                    Object* type_obj = type_val.as_object();
+                    if (type_obj->type == ObjectType::Class) {
+                        auto* klass = static_cast<ClassObject*>(type_obj);
+                        ClassObject::ComputedPropertyInfo info;
+                        info.name = chunk_->strings[name_idx];
+                        
+                        // Create getter function and closure
+                        const auto& getter_proto = chunk_->functions[getter_idx];
+                        auto* getter_func = allocate_object<FunctionObject>(
+                            getter_proto.name,
+                            getter_proto.params,
+                            getter_proto.chunk,
+                            false,
+                            false
+                        );
+                        auto* getter_closure = allocate_object<ClosureObject>(getter_func);
+                        info.getter = Value::from_object(getter_closure);
+                        
+                        // Create setter function and closure if present
+                        if (setter_idx != 0xFFFF && setter_idx < chunk_->functions.size()) {
+                            const auto& setter_proto = chunk_->functions[setter_idx];
+                            auto* setter_func = allocate_object<FunctionObject>(
+                                setter_proto.name,
+                                setter_proto.params,
+                                setter_proto.chunk,
+                                false,
+                                false
+                            );
+                            auto* setter_closure = allocate_object<ClosureObject>(setter_func);
+                            info.setter = Value::from_object(setter_closure);
+                        } else {
+                            info.setter = Value::null();
+                        }
+                        
+                        klass->computed_properties.push_back(std::move(info));
+                    } else if (type_obj->type == ObjectType::Enum) {
+                        auto* enum_type = static_cast<EnumObject*>(type_obj);
+                        EnumObject::ComputedPropertyInfo info;
+                        info.name = chunk_->strings[name_idx];
+                        
+                        // Create getter function and closure
+                        const auto& getter_proto = chunk_->functions[getter_idx];
+                        auto* getter_func = allocate_object<FunctionObject>(
+                            getter_proto.name,
+                            getter_proto.params,
+                            getter_proto.chunk,
+                            false,
+                            false
+                        );
+                        auto* getter_closure = allocate_object<ClosureObject>(getter_func);
+                        info.getter = Value::from_object(getter_closure);
+                        
+                        // Enum computed properties are read-only (no setter)
+                        info.setter = Value::null();
+                        
+                        enum_type->computed_properties.push_back(std::move(info));
+                    } else {
+                        throw std::runtime_error("OP_DEFINE_COMPUTED_PROPERTY expects class or enum on stack.");
+                    }
                     break;
                 }
                 case OpCode::OP_INHERIT: {
@@ -745,6 +848,63 @@ namespace swiftscript {
                     }
 
                     Object* obj = callee.as_object();
+
+                    // Struct call -> instantiate (value type)
+                    if (obj->type == ObjectType::Struct) {
+                        auto* struct_type = static_cast<StructObject*>(obj);
+                        auto* instance = allocate_object<StructInstanceObject>(struct_type);
+
+                        // Initialize properties with default values
+                        for (const auto& property : struct_type->properties) {
+                            Value prop_value = property.default_value;
+                            if (prop_value.is_object() && prop_value.ref_type() == RefType::Strong && prop_value.as_object()) {
+                                RC::retain(prop_value.as_object());
+                            }
+                            instance->fields[property.name] = prop_value;
+                        }
+
+                        // Replace callee with instance
+                        Value old_callee = stack_[callee_index];
+                        if (old_callee.is_object() && old_callee.ref_type() == RefType::Strong && old_callee.as_object()) {
+                            RC::release(this, old_callee.as_object());
+                        }
+                        stack_[callee_index] = Value::from_object(instance);
+
+                        // Check for init method
+                        auto it = struct_type->methods.find("init");
+                        if (it == struct_type->methods.end()) {
+                            // No init: check for memberwise initializer pattern
+                            // If arguments match property count, do memberwise init
+                            if (arg_count == struct_type->properties.size()) {
+                                // Memberwise initializer
+                                for (size_t i = 0; i < arg_count; ++i) {
+                                    Value arg = stack_[callee_index + 1 + i];
+                                    const std::string& prop_name = struct_type->properties[i].name;
+                                    if (arg.is_object() && arg.ref_type() == RefType::Strong && arg.as_object()) {
+                                        RC::retain(arg.as_object());
+                                    }
+                                    instance->fields[prop_name] = arg;
+                                }
+                                // Discard args using pop(), leave instance on stack
+                                while (stack_.size() > callee_index + 1) {
+                                    pop();
+                                }
+                                break;
+                            } else if (arg_count == 0) {
+                                // No args, no init - just use defaults
+                                break;
+                            } else {
+                                throw std::runtime_error("Struct '" + struct_type->name +
+                                    "' has no init and argument count doesn't match property count.");
+                            }
+                        }
+
+                        // Bind init as bound method for struct
+                        auto* bound = allocate_object<BoundMethodObject>(instance, it->second);
+                        stack_[callee_index] = Value::from_object(bound);
+                        callee = stack_[callee_index];
+                        obj = callee.as_object();
+                    }
 
                     // Class call -> instantiate
                     if (obj->type == ObjectType::Class) {
@@ -944,7 +1104,106 @@ namespace swiftscript {
                 }
                 case OpCode::OP_GET_PROPERTY: {
                     const std::string& name = read_string();
-                    Value obj = pop();
+                    Value obj = pop();  // Pop object from stack
+                    
+                    // Check for computed property first (for instances)
+                    if (obj.is_object() && obj.as_object()->type == ObjectType::Instance) {
+                        auto* inst = static_cast<InstanceObject*>(obj.as_object());
+                        if (inst->klass) {
+                            for (const auto& comp_prop : inst->klass->computed_properties) {
+                                if (comp_prop.name == name) {
+                                    // Found computed property - call getter
+                                    // Setup call: push getter function, push self
+                                    Value getter = comp_prop.getter;
+                                    
+                                    if (!getter.is_object()) {
+                                        throw std::runtime_error("Computed property getter is not a function.");
+                                    }
+                                    
+                                    Object* obj_callee = getter.as_object();
+                                    FunctionObject* func = nullptr;
+                                    ClosureObject* closure = nullptr;
+                                    
+                                    if (obj_callee->type == ObjectType::Closure) {
+                                        closure = static_cast<ClosureObject*>(obj_callee);
+                                        func = closure->function;
+                                    } else if (obj_callee->type == ObjectType::Function) {
+                                        func = static_cast<FunctionObject*>(obj_callee);
+                                    } else {
+                                        throw std::runtime_error("Computed property getter must be a function.");
+                                    }
+                                    
+                                    if (!func || !func->chunk) {
+                                        throw std::runtime_error("Getter function has no body.");
+                                    }
+                                    if (func->params.size() != 1) {
+                                        throw std::runtime_error("Getter should have exactly 1 parameter (self).");
+                                    }
+                                    
+                                    // Push callee and self argument
+                                    push(getter);
+                                    push(obj);  // self
+                                    
+                                    // Setup call frame
+                                    size_t callee_index = stack_.size() - 2;  // -2 because we have [getter, self]
+                                    call_frames_.emplace_back(callee_index + 1, ip_, chunk_, func->name, closure, false);
+                                    chunk_ = func->chunk.get();
+                                    ip_ = 0;
+                                    break;  // Continue execution in getter
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Check for computed property on EnumCase
+                    if (obj.is_object() && obj.as_object()->type == ObjectType::EnumCase) {
+                        auto* enum_case = static_cast<EnumCaseObject*>(obj.as_object());
+                        if (enum_case->enum_type) {
+                            for (const auto& comp_prop : enum_case->enum_type->computed_properties) {
+                                if (comp_prop.name == name) {
+                                    // Found computed property - call getter
+                                    Value getter = comp_prop.getter;
+                                    
+                                    if (!getter.is_object()) {
+                                        throw std::runtime_error("Computed property getter is not a function.");
+                                    }
+                                    
+                                    Object* obj_callee = getter.as_object();
+                                    FunctionObject* func = nullptr;
+                                    ClosureObject* closure = nullptr;
+                                    
+                                    if (obj_callee->type == ObjectType::Closure) {
+                                        closure = static_cast<ClosureObject*>(obj_callee);
+                                        func = closure->function;
+                                    } else if (obj_callee->type == ObjectType::Function) {
+                                        func = static_cast<FunctionObject*>(obj_callee);
+                                    } else {
+                                        throw std::runtime_error("Computed property getter must be a function.");
+                                    }
+                                    
+                                    if (!func || !func->chunk) {
+                                        throw std::runtime_error("Getter function has no body.");
+                                    }
+                                    if (func->params.size() != 1) {
+                                        throw std::runtime_error("Getter should have exactly 1 parameter (self).");
+                                    }
+                                    
+                                    // Push callee and self argument
+                                    push(getter);
+                                    push(obj);  // self (enum case)
+                                    
+                                    // Setup call frame
+                                    size_t callee_index = stack_.size() - 2;
+                                    call_frames_.emplace_back(callee_index + 1, ip_, chunk_, func->name, closure, false);
+                                    chunk_ = func->chunk.get();
+                                    ip_ = 0;
+                                    break;  // Continue execution in getter
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Not a computed property, use regular get_property
                     push(get_property(obj, name));
                     break;
                 }
@@ -952,7 +1211,8 @@ namespace swiftscript {
                 {
                     const std::string& name = read_string();
                     Value value = pop();
-                    Value obj_val = pop();
+                    Value obj_val = peek(0);  // Keep object on stack temporarily
+                    
                     if (!obj_val.is_object()) {
                         throw std::runtime_error("Property set on non-object.");
                     }
@@ -960,11 +1220,82 @@ namespace swiftscript {
                     if (!obj) {
                         throw std::runtime_error("Null object in property set.");
                     }
+                    
                     if (obj->type == ObjectType::Instance) {
                         auto* inst = static_cast<InstanceObject*>(obj);
+                        
+                        // Check if it's a computed property
+                        if (inst->klass) {
+                            for (const auto& comp_prop : inst->klass->computed_properties) {
+                                if (comp_prop.name == name) {
+                                    // Found computed property - call setter
+                                    if (comp_prop.setter.is_null()) {
+                                        throw std::runtime_error("Cannot set read-only computed property: " + name);
+                                    }
+                                    
+                                    // Stack: [... instance]
+                                    // Need to call setter with (self, newValue)
+                                    Value setter = comp_prop.setter;
+                                    
+                                    pop();  // Remove instance from stack
+                                    
+                                    push(setter);    // callee
+                                    push(obj_val);   // self arg
+                                    push(value);     // newValue arg
+                                    
+                                    // Execute OP_CALL logic inline
+                                    size_t arg_count = 2;
+                                    size_t callee_index = stack_.size() - arg_count - 1;
+                                    Value callee = stack_[callee_index];
+                                    
+                                    if (!callee.is_object()) {
+                                        throw std::runtime_error("Computed property setter is not a function.");
+                                    }
+                                    
+                                    Object* obj_callee = callee.as_object();
+                                    FunctionObject* func = nullptr;
+                                    ClosureObject* closure = nullptr;
+                                    
+                                    if (obj_callee->type == ObjectType::Closure) {
+                                        closure = static_cast<ClosureObject*>(obj_callee);
+                                        func = closure->function;
+                                    } else if (obj_callee->type == ObjectType::Function) {
+                                        func = static_cast<FunctionObject*>(obj_callee);
+                                    } else {
+                                        throw std::runtime_error("Computed property setter must be a function.");
+                                    }
+                                    
+                                    if (arg_count != func->params.size()) {
+                                        throw std::runtime_error("Incorrect argument count for computed property setter.");
+                                    }
+                                    if (!func->chunk) {
+                                        throw std::runtime_error("Setter function has no body.");
+                                    }
+                                    
+                                    call_frames_.emplace_back(callee_index + 1, ip_, chunk_, func->name, closure, false);
+                                    chunk_ = func->chunk.get();
+                                    ip_ = 0;
+                                    
+                                    // Note: When setter returns, we need to push the value
+                                    // This is handled by the return which will push value onto stack
+                                    // But we actually want to push 'value' not the setter's return
+                                    // So we'll handle this differently - save ip and continue after setter returns
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Regular stored property
+                        pop();  // Remove instance
+                        inst->fields[name] = value;
+                        push(value);
+                    } else if (obj->type == ObjectType::StructInstance) {
+                        pop();
+                        auto* inst = static_cast<StructInstanceObject*>(obj);
                         inst->fields[name] = value;
                         push(value);
                     } else if (obj->type == ObjectType::Map) {
+                        pop();
                         auto* dict = static_cast<MapObject*>(obj);
                         dict->entries[name] = value;
                         push(value);
@@ -1103,6 +1434,129 @@ namespace swiftscript {
                     std::cout << val.to_string() << '\n';
                     break;
                 }
+                case OpCode::OP_STRUCT: {
+                    // Create a struct type object (similar to OP_CLASS)
+                    uint16_t name_idx = read_short();
+                    if (name_idx >= chunk_->strings.size()) {
+                        throw std::runtime_error("Struct name index out of range.");
+                    }
+                    const std::string& name = chunk_->strings[name_idx];
+                    auto* struct_type = allocate_object<StructObject>(name);
+                    push(Value::from_object(struct_type));
+                    break;
+                }
+                case OpCode::OP_STRUCT_METHOD: {
+                    // Similar to OP_METHOD but with mutating flag
+                    uint16_t name_idx = read_short();
+                    uint8_t is_mutating = read_byte();
+                    if (stack_.size() < 2) {
+                        throw std::runtime_error("Stack underflow on struct method definition.");
+                    }
+                    Value method_val = pop();
+                    Value struct_val = peek(0);
+                    if (!struct_val.is_object() || !struct_val.as_object() ||
+                        struct_val.as_object()->type != ObjectType::Struct) {
+                        throw std::runtime_error("OP_STRUCT_METHOD expects struct on stack.");
+                    }
+                    if (name_idx >= chunk_->strings.size()) {
+                        throw std::runtime_error("Method name index out of range.");
+                    }
+                    auto* struct_type = static_cast<StructObject*>(struct_val.as_object());
+                    const std::string& name = chunk_->strings[name_idx];
+                    struct_type->methods[name] = method_val;
+                    struct_type->mutating_methods[name] = (is_mutating != 0);
+                    break;
+                }
+                case OpCode::OP_COPY_VALUE: {
+                    // Deep copy a struct instance for value semantics
+                    Value val = pop();
+                    if (val.is_object() && val.as_object() &&
+                        val.as_object()->type == ObjectType::StructInstance) {
+                        auto* inst = static_cast<StructInstanceObject*>(val.as_object());
+                        auto* copy = inst->deep_copy(*this);
+                        push(Value::from_object(copy));
+                    } else {
+                        // Not a struct instance, just pass through
+                        push(val);
+                    }
+                    break;
+                }
+                case OpCode::OP_ENUM: {
+                    // Create an enum type object (similar to OP_CLASS and OP_STRUCT)
+                    uint16_t name_idx = read_short();
+                    if (name_idx >= chunk_->strings.size()) {
+                        throw std::runtime_error("Enum name index out of range.");
+                    }
+                    const std::string& name = chunk_->strings[name_idx];
+                    auto* enum_type = allocate_object<EnumObject>(name);
+                    push(Value::from_object(enum_type));
+                    break;
+                }
+                case OpCode::OP_ENUM_CASE: {
+                    // Define an enum case
+                    // Stack: [enum_object, raw_value]
+                    uint16_t case_name_idx = read_short();
+                    uint8_t associated_count = read_byte();
+                    
+                    if (stack_.size() < 2) {
+                        throw std::runtime_error("Stack underflow on enum case definition.");
+                    }
+                    
+                    Value raw_value = pop();  // May be nil
+                    Value enum_val = peek(0);
+                    
+                    if (!enum_val.is_object() || !enum_val.as_object() ||
+                        enum_val.as_object()->type != ObjectType::Enum) {
+                        throw std::runtime_error("OP_ENUM_CASE expects enum on stack.");
+                    }
+                    if (case_name_idx >= chunk_->strings.size()) {
+                        throw std::runtime_error("Enum case name index out of range.");
+                    }
+                    
+                    auto* enum_type = static_cast<EnumObject*>(enum_val.as_object());
+                    const std::string& case_name = chunk_->strings[case_name_idx];
+                    
+                    // Create enum case instance
+                    auto* case_obj = allocate_object<EnumCaseObject>(enum_type, case_name);
+                    case_obj->raw_value = raw_value;
+                    // associated_count is for future use (associated values)
+                    
+                    // Store in enum's cases map
+                    enum_type->cases[case_name] = Value::from_object(case_obj);
+                    break;
+                }
+                case OpCode::OP_PROTOCOL: {
+                    // Create protocol object
+                    uint16_t protocol_idx = read_short();
+                    if (protocol_idx >= chunk_->protocols.size()) {
+                        throw std::runtime_error("Protocol index out of range.");
+                    }
+                    
+                    auto protocol = chunk_->protocols[protocol_idx];
+                    auto* protocol_obj = allocate_object<ProtocolObject>(protocol->name);
+                    
+                    // Store protocol requirements for runtime validation
+                    for (const auto& method_req : protocol->method_requirements) {
+                        protocol_obj->method_requirements.push_back(method_req.name);
+                    }
+                    for (const auto& prop_req : protocol->property_requirements) {
+                        protocol_obj->property_requirements.push_back(prop_req.name);
+                    }
+                    
+                    push(Value::from_object(protocol_obj));
+                    break;
+                }
+                case OpCode::OP_DEFINE_GLOBAL: {
+                    // Define a global variable with the value on top of stack
+                    uint16_t name_idx = read_short();
+                    if (name_idx >= chunk_->strings.size()) {
+                        throw std::runtime_error("Global name index out of range.");
+                    }
+                    const std::string& name = chunk_->strings[name_idx];
+                    globals_[name] = peek(0);
+                    pop();
+                    break;
+                }
                 case OpCode::OP_HALT:
                     return stack_.empty() ? Value::null() : pop();
                 default:
@@ -1203,6 +1657,7 @@ namespace swiftscript {
                     return Value::from_object(bound);
                 }
             }
+            // Note: Computed properties are handled in OP_GET_PROPERTY directly
             return Value::null();
         }
 
@@ -1215,7 +1670,77 @@ namespace swiftscript {
             return Value::null();
         }
 
-        throw std::runtime_error("Property access supported only on arrays and maps.");
+        // Struct instance property access
+        if (obj->type == ObjectType::StructInstance) {
+            auto* inst = static_cast<StructInstanceObject*>(obj);
+            auto field_it = inst->fields.find(name);
+            if (field_it != inst->fields.end()) {
+                return field_it->second;
+            }
+            // Check for methods on the struct type
+            if (inst->struct_type) {
+                auto method_it = inst->struct_type->methods.find(name);
+                if (method_it != inst->struct_type->methods.end()) {
+                    // Create a bound method
+                    // For struct, we need to copy the instance for value semantics
+                    auto* copy = inst->deep_copy(*this);
+                    auto* bound = allocate_object<BoundMethodObject>(copy, method_it->second);
+                    return Value::from_object(bound);
+                }
+            }
+            return Value::null();
+        }
+
+        // Struct type property access (static methods would go here)
+        if (obj->type == ObjectType::Struct) {
+            auto* struct_type = static_cast<StructObject*>(obj);
+            auto method_it = struct_type->methods.find(name);
+            if (method_it != struct_type->methods.end()) {
+                return method_it->second;
+            }
+            return Value::null();
+        }
+
+        // Enum type: access enum cases (Direction.north)
+        if (obj->type == ObjectType::Enum) {
+            auto* enum_type = static_cast<EnumObject*>(obj);
+            auto case_it = enum_type->cases.find(name);
+            if (case_it != enum_type->cases.end()) {
+                return case_it->second;  // Return EnumCaseObject
+            }
+            // Also check for static methods
+            auto method_it = enum_type->methods.find(name);
+            if (method_it != enum_type->methods.end()) {
+                return method_it->second;
+            }
+            throw std::runtime_error("Enum '" + enum_type->name + "' has no case or method named '" + name + "'");
+        }
+
+        // Enum case: access methods and properties (direction.describe())
+        if (obj->type == ObjectType::EnumCase) {
+            auto* enum_case = static_cast<EnumCaseObject*>(obj);
+            
+            // Special property: rawValue
+            if (name == "rawValue") {
+                return enum_case->raw_value;
+            }
+            
+            // Note: Computed properties are handled in OP_GET_PROPERTY directly
+            // Here we only handle methods
+            
+            // Look for methods in the enum type
+            if (enum_case->enum_type) {
+                auto method_it = enum_case->enum_type->methods.find(name);
+                if (method_it != enum_case->enum_type->methods.end()) {
+                    // Bind the method to this enum case
+                    auto* bound = allocate_object<BoundMethodObject>(enum_case, method_it->second);
+                    return Value::from_object(bound);
+                }
+            }
+            throw std::runtime_error("Enum case '" + enum_case->case_name + "' has no property or method named '" + name + "'");
+        }
+
+        throw std::runtime_error("Property access supported only on arrays, maps, and instances.");
     }
 
     bool VM::find_method_on_class(ClassObject* klass, const std::string& name, Value& out_method) const {
