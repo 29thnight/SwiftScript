@@ -27,6 +27,10 @@ TypeChecker::TypeInfo TypeChecker::TypeInfo::function(std::vector<TypeInfo> para
     return info;
 }
 
+TypeChecker::TypeInfo TypeChecker::TypeInfo::generic(std::string name, bool optional) {
+    return TypeInfo{std::move(name), optional, TypeKind::GenericParameter, {}, nullptr};
+}
+
 void TypeChecker::check(const std::vector<StmtPtr>& program) {
 known_types_.clear();
 type_properties_.clear();
@@ -40,6 +44,7 @@ protocol_inheritance_.clear();
 protocol_descendants_.clear();
 scopes_.clear();
 function_stack_.clear();
+generic_param_stack_.clear();
 let_constants_.clear();
 current_type_context_.clear();
 errors_.clear();
@@ -57,6 +62,7 @@ errors_.clear();
     for (const auto& stmt : program) {
         if (stmt && stmt->kind == StmtKind::FuncDecl) {
             const auto* func = static_cast<const FuncDeclStmt*>(stmt.get());
+            enter_generic_params(func->generic_params);
             std::vector<TypeInfo> params;
             params.reserve(func->params.size());
             for (const auto& param : func->params) {
@@ -67,6 +73,7 @@ errors_.clear();
                 return_type = type_from_annotation(func->return_type.value(), func->line);
             }
             declare_symbol(func->name, TypeInfo::function(params, return_type), func->line);
+            exit_generic_params();
         }
     }
     for (const auto& stmt : program) {
@@ -138,6 +145,7 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
             case StmtKind::ClassDecl: {
                 auto* decl = static_cast<const ClassDeclStmt*>(stmt);
                 add_known_type(decl->name, TypeKind::User, decl->line);
+                enter_generic_params(decl->generic_params);
                 if (decl->superclass_name.has_value()) {
                     superclass_map_[decl->name] = decl->superclass_name.value();
                 }
@@ -156,6 +164,7 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                     if (!method) {
                         continue;
                     }
+                    enter_generic_params(method->generic_params);
                     std::vector<TypeInfo> params;
                     params.reserve(method->params.size());
                     for (const auto& param : method->params) {
@@ -170,12 +179,15 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                         TypeInfo::function(params, return_type));
                     // Track access level
                     member_access_levels_[decl->name][method->name] = method->access_level;
+                    exit_generic_params();
                 }
+                exit_generic_params();
                 break;
             }
             case StmtKind::StructDecl: {
                 auto* decl = static_cast<const StructDeclStmt*>(stmt);
                 add_known_type(decl->name, TypeKind::User, decl->line);
+                enter_generic_params(decl->generic_params);
                 add_protocol_conformance(decl->name, decl->protocol_conformances, decl->line);
                 for (const auto& property : decl->properties) {
                     if (!property || !property->type_annotation.has_value()) {
@@ -191,6 +203,7 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                     if (!method) {
                         continue;
                     }
+                    enter_generic_params(method->generic_params);
                     std::vector<TypeInfo> params;
                     params.reserve(method->params.size());
                     for (const auto& param : method->params) {
@@ -209,12 +222,15 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                     if (method->is_mutating) {
                         mutating_methods_[decl->name].insert(method->name);
                     }
+                    exit_generic_params();
                 }
+                exit_generic_params();
                 break;
             }
             case StmtKind::EnumDecl: {
                 auto* decl = static_cast<const EnumDeclStmt*>(stmt);
                 add_known_type(decl->name, TypeKind::User, decl->line);
+                enter_generic_params(decl->generic_params);
                 
                 // Add rawValue property if enum has raw type
                 if (decl->raw_type.has_value()) {
@@ -229,6 +245,7 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                     if (!method) {
                         continue;
                     }
+                    enter_generic_params(method->generic_params);
                     std::vector<TypeInfo> params;
                     params.reserve(method->params.size());
                     for (const auto& param : method->params) {
@@ -241,7 +258,9 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                     type_methods_[decl->name].emplace(
                         method->name,
                         TypeInfo::function(params, return_type));
+                    exit_generic_params();
                 }
+                exit_generic_params();
                 break;
             }
             case StmtKind::ProtocolDecl: {
@@ -258,6 +277,7 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                         if (!method) {
                             continue;
                         }
+                        enter_generic_params(method->generic_params);
                         std::vector<TypeInfo> params;
                         params.reserve(method->params.size());
                         for (const auto& param : method->params) {
@@ -276,6 +296,7 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                         if (method->is_mutating) {
                             mutating_methods_[decl->extended_type].insert(method->name);
                         }
+                        exit_generic_params();
                     }
                 }
                 break;
@@ -327,6 +348,30 @@ void TypeChecker::exit_scope() {
     if (!scopes_.empty()) {
         scopes_.pop_back();
     }
+}
+
+void TypeChecker::enter_generic_params(const std::vector<std::string>& params) {
+    std::unordered_set<std::string> param_set;
+    param_set.reserve(params.size());
+    for (const auto& param : params) {
+        param_set.insert(param);
+    }
+    generic_param_stack_.push_back(std::move(param_set));
+}
+
+void TypeChecker::exit_generic_params() {
+    if (!generic_param_stack_.empty()) {
+        generic_param_stack_.pop_back();
+    }
+}
+
+bool TypeChecker::is_generic_param(const std::string& name) const {
+    for (auto it = generic_param_stack_.rbegin(); it != generic_param_stack_.rend(); ++it) {
+        if (it->contains(name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void TypeChecker::declare_symbol(const std::string& name, const TypeInfo& type, uint32_t line, bool is_let) {
@@ -605,6 +650,7 @@ void TypeChecker::check_throw_stmt(const ThrowStmt* stmt) {
 }
 
 void TypeChecker::check_func_decl(const FuncDeclStmt* stmt, const std::string& self_type) {
+    enter_generic_params(stmt->generic_params);
     std::vector<TypeInfo> params;
     params.reserve(stmt->params.size());
     for (const auto& param : stmt->params) {
@@ -633,6 +679,7 @@ void TypeChecker::check_func_decl(const FuncDeclStmt* stmt, const std::string& s
     check_block(stmt->body.get());
     function_stack_.pop_back();
     exit_scope();
+    exit_generic_params();
 }
 
 void TypeChecker::check_class_decl(const ClassDeclStmt* stmt) {
@@ -647,6 +694,7 @@ void TypeChecker::check_class_decl(const ClassDeclStmt* stmt) {
     std::string prev_context = current_type_context_;
     current_type_context_ = stmt->name;
     
+    enter_generic_params(stmt->generic_params);
     enter_scope();
     declare_symbol("self", TypeInfo::user(stmt->name), stmt->line);
 
@@ -664,6 +712,7 @@ void TypeChecker::check_class_decl(const ClassDeclStmt* stmt) {
     }
 
     exit_scope();
+    exit_generic_params();
     current_type_context_ = prev_context;
 }
 
@@ -671,6 +720,7 @@ void TypeChecker::check_struct_decl(const StructDeclStmt* stmt) {
     std::string prev_context = current_type_context_;
     current_type_context_ = stmt->name;
     
+    enter_generic_params(stmt->generic_params);
     enter_scope();
     declare_symbol("self", TypeInfo::user(stmt->name), stmt->line);
 
@@ -682,6 +732,7 @@ void TypeChecker::check_struct_decl(const StructDeclStmt* stmt) {
         if (!method) {
             continue;
         }
+        enter_generic_params(method->generic_params);
         enter_scope();
         declare_symbol("self", TypeInfo::user(stmt->name), stmt->line);
         std::vector<TypeInfo> params;
@@ -699,6 +750,7 @@ void TypeChecker::check_struct_decl(const StructDeclStmt* stmt) {
         check_block(method->body.get());
         function_stack_.pop_back();
         exit_scope();
+        exit_generic_params();
     }
 
     for (const auto& init : stmt->initializers) {
@@ -706,10 +758,12 @@ void TypeChecker::check_struct_decl(const StructDeclStmt* stmt) {
     }
 
     exit_scope();
+    exit_generic_params();
     current_type_context_ = prev_context;
 }
 
 void TypeChecker::check_enum_decl(const EnumDeclStmt* stmt) {
+    enter_generic_params(stmt->generic_params);
     enter_scope();
     declare_symbol("self", TypeInfo::user(stmt->name), stmt->line);
 
@@ -717,6 +771,7 @@ void TypeChecker::check_enum_decl(const EnumDeclStmt* stmt) {
         if (!method) {
             continue;
         }
+        enter_generic_params(method->generic_params);
         enter_scope();
         declare_symbol("self", TypeInfo::user(stmt->name), stmt->line);
         std::vector<TypeInfo> params;
@@ -734,24 +789,30 @@ void TypeChecker::check_enum_decl(const EnumDeclStmt* stmt) {
         check_block(method->body.get());
         function_stack_.pop_back();
         exit_scope();
+        exit_generic_params();
     }
 
     exit_scope();
+    exit_generic_params();
 }
 
 void TypeChecker::check_protocol_decl(const ProtocolDeclStmt* stmt) {
+    enter_generic_params(stmt->generic_params);
     for (const auto& requirement : stmt->method_requirements) {
+        enter_generic_params(requirement.generic_params);
         for (const auto& param : requirement.params) {
             type_from_annotation(param.type, stmt->line);
         }
         if (requirement.return_type.has_value()) {
             type_from_annotation(requirement.return_type.value(), stmt->line);
         }
+        exit_generic_params();
     }
 
     for (const auto& requirement : stmt->property_requirements) {
         type_from_annotation(requirement.type, stmt->line);
     }
+    exit_generic_params();
 }
 
 void TypeChecker::check_extension_decl(const ExtensionDeclStmt* stmt) {
@@ -769,6 +830,7 @@ void TypeChecker::check_extension_decl(const ExtensionDeclStmt* stmt) {
         if (!method) {
             continue;
         }
+        enter_generic_params(method->generic_params);
         enter_scope();
         declare_symbol("self", TypeInfo::user(stmt->extended_type), stmt->line);
         std::vector<TypeInfo> params;
@@ -786,6 +848,7 @@ void TypeChecker::check_extension_decl(const ExtensionDeclStmt* stmt) {
         check_block(method->body.get());
         function_stack_.pop_back();
         exit_scope();
+        exit_generic_params();
     }
 
     exit_scope();
@@ -909,6 +972,78 @@ TypeChecker::TypeInfo TypeChecker::check_unary_expr(const UnaryExpr* expr) {
 TypeChecker::TypeInfo TypeChecker::check_binary_expr(const BinaryExpr* expr) {
     TypeInfo left = check_expr(expr->left.get());
     TypeInfo right = check_expr(expr->right.get());
+
+    auto operator_name = [](TokenType type) -> std::string {
+        switch (type) {
+            case TokenType::Plus:
+                return "+";
+            case TokenType::Minus:
+                return "-";
+            case TokenType::Star:
+                return "*";
+            case TokenType::Slash:
+                return "/";
+            case TokenType::Percent:
+                return "%";
+            case TokenType::EqualEqual:
+                return "==";
+            case TokenType::NotEqual:
+                return "!=";
+            case TokenType::Less:
+                return "<";
+            case TokenType::LessEqual:
+                return "<=";
+            case TokenType::Greater:
+                return ">";
+            case TokenType::GreaterEqual:
+                return ">=";
+            case TokenType::BitwiseAnd:
+                return "&";
+            case TokenType::BitwiseOr:
+                return "|";
+            case TokenType::BitwiseXor:
+                return "^";
+            case TokenType::LeftShift:
+                return "<<";
+            case TokenType::RightShift:
+                return ">>";
+            default:
+                return "";
+        }
+    };
+
+    auto resolve_overload = [&](const TypeInfo& lhs, const TypeInfo& rhs) -> std::optional<TypeInfo> {
+        std::string symbol = operator_name(expr->op);
+        if (symbol.empty()) {
+            return std::nullopt;
+        }
+        TypeInfo base = lhs.is_optional ? base_type(lhs) : lhs;
+        if (base.kind != TypeKind::User) {
+            return std::nullopt;
+        }
+        auto type_it = type_methods_.find(base.name);
+        if (type_it == type_methods_.end()) {
+            return std::nullopt;
+        }
+        auto method_it = type_it->second.find(symbol);
+        if (method_it == type_it->second.end()) {
+            return std::nullopt;
+        }
+        const TypeInfo& method_type = method_it->second;
+        if (method_type.param_types.size() == 1) {
+            if (!is_unknown(rhs) && !is_assignable(method_type.param_types[0], rhs)) {
+                return std::nullopt;
+            }
+        }
+        if (!method_type.return_type) {
+            return TypeInfo::unknown();
+        }
+        return *method_type.return_type;
+    };
+
+    if (auto overload = resolve_overload(left, right)) {
+        return *overload;
+    }
 
     switch (expr->op) {
         case TokenType::Plus:
@@ -1303,6 +1438,14 @@ TypeChecker::TypeInfo TypeChecker::type_from_annotation(const TypeAnnotation& an
         return func_type;
     }
 
+    for (const auto& generic_arg : annotation.generic_args) {
+        type_from_annotation(generic_arg, line);
+    }
+
+    if (is_generic_param(annotation.name)) {
+        return TypeInfo::generic(annotation.name, annotation.is_optional);
+    }
+
     auto it = known_types_.find(annotation.name);
     if (it == known_types_.end()) {
         error("Unknown type '" + annotation.name + "'", line);
@@ -1386,7 +1529,7 @@ bool TypeChecker::is_nil(const TypeInfo& type) const {
 }
 
 bool TypeChecker::is_unknown(const TypeInfo& type) const {
-    return type.kind == TypeKind::Unknown;
+    return type.kind == TypeKind::Unknown || type.kind == TypeKind::GenericParameter;
 }
 
 TypeChecker::TypeInfo TypeChecker::make_optional(const TypeInfo& type) const {

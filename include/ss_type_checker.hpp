@@ -32,6 +32,7 @@ private:
         User,
         Protocol,
         Function,
+        GenericParameter,
     };
 
     struct TypeInfo {
@@ -46,6 +47,7 @@ private:
         static TypeInfo user(std::string name, bool optional = false);
         static TypeInfo protocol(std::string name, bool optional = false);
         static TypeInfo function(std::vector<TypeInfo> params, TypeInfo result);
+        static TypeInfo generic(std::string name, bool optional = false);
     };
 
     struct FunctionContext {
@@ -65,6 +67,7 @@ private:
 
     std::vector<std::unordered_map<std::string, TypeInfo>> scopes_;
     std::vector<FunctionContext> function_stack_;
+    std::vector<std::unordered_set<std::string>> generic_param_stack_;
     std::unordered_set<std::string> let_constants_;  // Track let constants
     std::string current_type_context_;  // Track which type we're currently inside (for access control)
     mutable std::vector<TypeCheckError> errors_;
@@ -78,6 +81,9 @@ private:
 
     void enter_scope();
     void exit_scope();
+    void enter_generic_params(const std::vector<std::string>& params);
+    void exit_generic_params();
+    bool is_generic_param(const std::string& name) const;
     void declare_symbol(const std::string& name, const TypeInfo& type, uint32_t line, bool is_let = false);
     TypeInfo lookup_symbol(const std::string& name, uint32_t line) const;
     bool has_symbol(const std::string& name) const;

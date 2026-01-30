@@ -371,6 +371,10 @@ namespace swiftscript {
                         auto fa = a.try_as<Float>();
                         auto fb = b.try_as<Float>();
                         if (!fa || !fb) {
+                            if (auto overloaded = call_operator_overload(a, b, "+")) {
+                                push(*overloaded);
+                                break;
+                            }
                             throw std::runtime_error("Operands must be numbers for addition.");
                         }
                         push(Value::from_float(*fa + *fb));
@@ -383,6 +387,10 @@ namespace swiftscript {
                     auto fa = a.try_as<Float>();
                     auto fb = b.try_as<Float>();
                     if (!fa || !fb) {
+                        if (auto overloaded = call_operator_overload(a, b, "-")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be numbers for subtraction.");
                     }
                     if (a.is_int() && b.is_int()) {
@@ -398,6 +406,10 @@ namespace swiftscript {
                     auto fa = a.try_as<Float>();
                     auto fb = b.try_as<Float>();
                     if (!fa || !fb) {
+                        if (auto overloaded = call_operator_overload(a, b, "*")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be numbers for multiplication.");
                     }
                     if (a.is_int() && b.is_int()) {
@@ -413,6 +425,10 @@ namespace swiftscript {
                     auto fa = a.try_as<Float>();
                     auto fb = b.try_as<Float>();
                     if (!fa || !fb) {
+                        if (auto overloaded = call_operator_overload(a, b, "/")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be numbers for division.");
                     }
                     push(Value::from_float(*fa / *fb));
@@ -422,6 +438,10 @@ namespace swiftscript {
                     Value b = pop();
                     Value a = pop();
                     if (!a.is_int() || !b.is_int()) {
+                        if (auto overloaded = call_operator_overload(a, b, "%")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be integers for modulo.");
                     }
                     push(Value::from_int(a.as_int() % b.as_int()));
@@ -450,6 +470,10 @@ namespace swiftscript {
                     Value b = pop();
                     Value a = pop();
                     if (!a.is_int() || !b.is_int()) {
+                        if (auto overloaded = call_operator_overload(a, b, "&")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be integers for bitwise and.");
                     }
                     push(Value::from_int(a.as_int() & b.as_int()));
@@ -459,6 +483,10 @@ namespace swiftscript {
                     Value b = pop();
                     Value a = pop();
                     if (!a.is_int() || !b.is_int()) {
+                        if (auto overloaded = call_operator_overload(a, b, "|")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be integers for bitwise or.");
                     }
                     push(Value::from_int(a.as_int() | b.as_int()));
@@ -468,6 +496,10 @@ namespace swiftscript {
                     Value b = pop();
                     Value a = pop();
                     if (!a.is_int() || !b.is_int()) {
+                        if (auto overloaded = call_operator_overload(a, b, "^")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be integers for bitwise xor.");
                     }
                     push(Value::from_int(a.as_int() ^ b.as_int()));
@@ -477,6 +509,10 @@ namespace swiftscript {
                     Value b = pop();
                     Value a = pop();
                     if (!a.is_int() || !b.is_int()) {
+                        if (auto overloaded = call_operator_overload(a, b, "<<")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be integers for left shift.");
                     }
                     push(Value::from_int(a.as_int() << b.as_int()));
@@ -486,6 +522,10 @@ namespace swiftscript {
                     Value b = pop();
                     Value a = pop();
                     if (!a.is_int() || !b.is_int()) {
+                        if (auto overloaded = call_operator_overload(a, b, ">>")) {
+                            push(*overloaded);
+                            break;
+                        }
                         throw std::runtime_error("Operands must be integers for right shift.");
                     }
                     push(Value::from_int(a.as_int() >> b.as_int()));
@@ -494,12 +534,20 @@ namespace swiftscript {
                 case OpCode::OP_EQUAL: {
                     Value b = pop();
                     Value a = pop();
+                    if (auto overloaded = call_operator_overload(a, b, "==")) {
+                        push(*overloaded);
+                        break;
+                    }
                     push(Value::from_bool(a.equals(b)));
                     break;
                 }
                 case OpCode::OP_NOT_EQUAL: {
                     Value b = pop();
                     Value a = pop();
+                    if (auto overloaded = call_operator_overload(a, b, "!=")) {
+                        push(*overloaded);
+                        break;
+                    }
                     push(Value::from_bool(!a.equals(b)));
                     break;
                 }
@@ -512,6 +560,29 @@ namespace swiftscript {
                     auto fa = a.try_as<Float>();
                     auto fb = b.try_as<Float>();
                     if (!fa || !fb) {
+                        std::string op_name;
+                        switch (op) {
+                            case OpCode::OP_LESS:
+                                op_name = "<";
+                                break;
+                            case OpCode::OP_GREATER:
+                                op_name = ">";
+                                break;
+                            case OpCode::OP_LESS_EQUAL:
+                                op_name = "<=";
+                                break;
+                            case OpCode::OP_GREATER_EQUAL:
+                                op_name = ">=";
+                                break;
+                            default:
+                                break;
+                        }
+                        if (!op_name.empty()) {
+                            if (auto overloaded = call_operator_overload(a, b, op_name)) {
+                                push(*overloaded);
+                                break;
+                            }
+                        }
                         throw std::runtime_error("Operands must be numbers for comparison.");
                     }
                     bool result = false;
@@ -2742,6 +2813,65 @@ namespace swiftscript {
         }
 
         throw std::runtime_error("Property access supported only on arrays, maps, and instances.");
+    }
+
+    std::optional<Value> VM::call_operator_overload(const Value& left, const Value& right, const std::string& name) {
+        if (!left.is_object() || !left.as_object()) {
+            return std::nullopt;
+        }
+
+        Value method_value = Value::null();
+        try {
+            method_value = get_property(left, name);
+        } catch (const std::exception&) {
+            return std::nullopt;
+        }
+
+        if (method_value.is_null() || !method_value.is_object() || !method_value.as_object()) {
+            return std::nullopt;
+        }
+
+        Object* obj = method_value.as_object();
+        FunctionObject* func = nullptr;
+        ClosureObject* closure = nullptr;
+        std::vector<Value> args;
+
+        if (obj->type == ObjectType::BoundMethod) {
+            auto* bound = static_cast<BoundMethodObject*>(obj);
+            args.push_back(Value::from_object(bound->receiver));
+            args.push_back(right);
+            Value bound_method = bound->method;
+            if (!bound_method.is_object() || !bound_method.as_object()) {
+                return std::nullopt;
+            }
+            Object* bound_obj = bound_method.as_object();
+            if (bound_obj->type == ObjectType::Closure) {
+                closure = static_cast<ClosureObject*>(bound_obj);
+                func = closure->function;
+            } else if (bound_obj->type == ObjectType::Function) {
+                func = static_cast<FunctionObject*>(bound_obj);
+            } else {
+                return std::nullopt;
+            }
+            return execute_function(func, closure, args);
+        }
+
+        if (obj->type == ObjectType::Closure) {
+            closure = static_cast<ClosureObject*>(obj);
+            func = closure->function;
+            args.push_back(left);
+            args.push_back(right);
+            return execute_function(func, closure, args);
+        }
+
+        if (obj->type == ObjectType::Function) {
+            func = static_cast<FunctionObject*>(obj);
+            args.push_back(left);
+            args.push_back(right);
+            return execute_function(func, nullptr, args);
+        }
+
+        return std::nullopt;
     }
 
     bool VM::find_method_on_class(ClassObject* klass, const std::string& name, Value& out_method) const {
