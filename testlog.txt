@@ -1,6 +1,6 @@
 ========================================
 SwiftScript Test Results
-Date: 2026-01-30 15:44:08
+Date: 2026-01-30 20:46:25
 ========================================
 
 Starting 12 test suites with 124 tests.
@@ -28,7 +28,7 @@ Starting 12 test suites with 124 tests.
   [       OK ] ClassTests.DeinitCalled (0 ms)
   [ RUN      ] ClassTests.DeinitWithProperties
   [       OK ] ClassTests.DeinitWithProperties (0 ms)
-  Tests passed: 11/11 (6 ms)
+  Tests passed: 11/11 (7 ms)
 
 [ Test Suite ] ComputedPropertiesTests
   [ RUN      ] ComputedPropertiesTests.GetterOnly
@@ -45,7 +45,7 @@ Starting 12 test suites with 124 tests.
   [       OK ] ComputedPropertiesTests.AccessOtherProperties (0 ms)
   [ RUN      ] ComputedPropertiesTests.MultipleInClass
   [       OK ] ComputedPropertiesTests.MultipleInClass (0 ms)
-  Tests passed: 7/7 (3 ms)
+  Tests passed: 7/7 (4 ms)
 
 [ Test Suite ] StructTests
   [ RUN      ] StructTests.BasicStruct
@@ -68,7 +68,7 @@ Starting 12 test suites with 124 tests.
   [       OK ] StructTests.PropertyModification (0 ms)
   [ RUN      ] StructTests.NestedStruct
   [       OK ] StructTests.NestedStruct (0 ms)
-  Tests passed: 10/10 (3 ms)
+  Tests passed: 10/10 (4 ms)
 
 [ Test Suite ] ClosureTests
   [ RUN      ] ClosureTests.BasicClosure
@@ -89,7 +89,7 @@ Starting 12 test suites with 124 tests.
   [       OK ] ClosureTests.ClosureCapturesOuterVariable (0 ms)
   [ RUN      ] ClosureTests.NestedClosureAfterScopeExit
   [       OK ] ClosureTests.NestedClosureAfterScopeExit (0 ms)
-  Tests passed: 9/9 (3 ms)
+  Tests passed: 9/9 (4 ms)
 
 [ Test Suite ] SwitchTests
   [ RUN      ] SwitchTests.BasicSwitch
@@ -106,20 +106,25 @@ Starting 12 test suites with 124 tests.
   [ RUN      ] EnumTests.BasicEnum
   [       OK ] EnumTests.BasicEnum (0 ms)
   [ RUN      ] EnumTests.EnumRawValues
-  [       OK ] EnumTests.EnumRawValues (1 ms)
+  [  FAILED  ] EnumTests.EnumRawValues (0 ms)
+    C:\Users\user\Desktop\SwiftScript\test\test_gtest.cpp:465
+    Expected: swiftscript::test::test_enum_raw_values() doesn't throw an exception.
+  Actual: it throws std::runtime_error with description "Expected to find '3' in output (test_enum_raw_values)
+Actual output: ERROR: Unknown member 'rawValue' on type 'Priority' (line 9) (line 9)".
+
   [ RUN      ] EnumTests.EnumSwitch
   [       OK ] EnumTests.EnumSwitch (0 ms)
   [ RUN      ] EnumTests.EnumAssociatedValues
-  [       OK ] EnumTests.EnumAssociatedValues (1 ms)
+  [       OK ] EnumTests.EnumAssociatedValues (0 ms)
   [ RUN      ] EnumTests.EnumComparison
-  [       OK ] EnumTests.EnumComparison (1 ms)
+  [       OK ] EnumTests.EnumComparison (0 ms)
   [ RUN      ] EnumTests.EnumMethods
   [       OK ] EnumTests.EnumMethods (0 ms)
   [ RUN      ] EnumTests.EnumComputedProperties
   [       OK ] EnumTests.EnumComputedProperties (0 ms)
   [ RUN      ] EnumTests.MultipleEnums
   [       OK ] EnumTests.MultipleEnums (0 ms)
-  Tests passed: 8/8 (103 ms)
+  Tests passed: 7/8 (4 ms)
 
 [ Test Suite ] ProtocolTest
   [ RUN      ] ProtocolTest.BasicProtocolDeclaration
@@ -142,13 +147,18 @@ Starting 12 test suites with 124 tests.
   [       OK ] ProtocolTest.MultipleProtocolConformance (0 ms)
   [ RUN      ] ProtocolTest.ProtocolMethodParameters
   [       OK ] ProtocolTest.ProtocolMethodParameters (0 ms)
-  Tests passed: 10/10 (3 ms)
+  Tests passed: 10/10 (4 ms)
 
 [ Test Suite ] EnumInlineTests
   [ RUN      ] EnumInlineTests.BasicEnumDeclaration
   [       OK ] EnumInlineTests.BasicEnumDeclaration (0 ms)
   [ RUN      ] EnumInlineTests.EnumRawValues
-  [       OK ] EnumInlineTests.EnumRawValues (0 ms)
+  [  FAILED  ] EnumInlineTests.EnumRawValues (0 ms)
+    C:\Users\user\Desktop\SwiftScript\test\test_gtest.cpp:545
+    Expected: swiftscript::test::test_enum_raw_values_inline() doesn't throw an exception.
+  Actual: it throws std::runtime_error with description "Expected to find '3' in output (test_enum_raw_values_inline)
+Actual output: ERROR: Unknown member 'rawValue' on type 'Priority' (line 9) (line 9)".
+
   [ RUN      ] EnumInlineTests.EnumComparison
   [       OK ] EnumInlineTests.EnumComparison (0 ms)
   [ RUN      ] EnumInlineTests.EnumWithMethod
@@ -159,7 +169,7 @@ Starting 12 test suites with 124 tests.
   [       OK ] EnumInlineTests.EnumInSwitchStatement (0 ms)
   [ RUN      ] EnumInlineTests.EnumSimpleComputedProperty
   [       OK ] EnumInlineTests.EnumSimpleComputedProperty (0 ms)
-  Tests passed: 7/7 (3 ms)
+  Tests passed: 6/7 (3 ms)
 
 [ Test Suite ] ExtensionTest
   [ RUN      ] ExtensionTest.BasicMethod
@@ -182,7 +192,7 @@ Starting 12 test suites with 124 tests.
   [       OK ] ExtensionTest.EnumWithSwitch (0 ms)
   [ RUN      ] ExtensionTest.SimpleComputedProperty
   [       OK ] ExtensionTest.SimpleComputedProperty (0 ms)
-  Tests passed: 10/10 (4 ms)
+  Tests passed: 10/10 (5 ms)
 
 [ Test Suite ] Phase1Test
   [ RUN      ] Phase1Test.SelfAssignmentInInit
@@ -257,7 +267,7 @@ Actual output: 0
 
   [ RUN      ] Phase1Test.IntegrationKitchenSink
   [       OK ] Phase1Test.IntegrationKitchenSink (0 ms)
-  Tests passed: 32/33 (12 ms)
+  Tests passed: 32/33 (15 ms)
 
 [ Test Suite ] BitwiseOperatorsTest
   [ RUN      ] BitwiseOperatorsTest.BitwiseAnd
@@ -280,7 +290,7 @@ Actual output: 0
   [       OK ] BitwiseOperatorsTest.Precedence (0 ms)
   [ RUN      ] BitwiseOperatorsTest.PercentEqual
   [       OK ] BitwiseOperatorsTest.PercentEqual (0 ms)
-  Tests passed: 10/10 (2 ms)
+  Tests passed: 10/10 (4 ms)
 
 [ Test Suite ] StaticMembersTest
   [ RUN      ] StaticMembersTest.ClassStaticMethod
@@ -293,16 +303,16 @@ Actual output: 0
   [       OK ] StaticMembersTest.ExtensionStaticMethod (0 ms)
   [ RUN      ] StaticMembersTest.MixedStaticInstance
   [       OK ] StaticMembersTest.MixedStaticInstance (0 ms)
-  Tests passed: 5/5 (2 ms)
+  Tests passed: 5/5 (3 ms)
 
 ========================================
 Test Summary
 ========================================
 Total test suites: 12
 Total tests: 124
-Passed: 123
-Failed: 1
-Elapsed time: 150 ms
+Passed: 121
+Failed: 3
+Elapsed time: 66 ms
 ========================================
 
 SOME TESTS FAILED!

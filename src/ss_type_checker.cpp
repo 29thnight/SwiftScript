@@ -182,11 +182,11 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                     std::vector<TypeInfo> params;
                     params.reserve(method->params.size());
                     for (const auto& param : method->params) {
-                        params.push_back(type_from_annotation(param.type, method->line));
+                        params.push_back(type_from_annotation(param.type, decl->line));
                     }
                     TypeInfo return_type = TypeInfo::builtin("Void");
                     if (method->return_type.has_value()) {
-                        return_type = type_from_annotation(method->return_type.value(), method->line);
+                        return_type = type_from_annotation(method->return_type.value(), decl->line);
                     }
                     type_methods_[decl->name].emplace(
                         method->name,
@@ -197,6 +197,13 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
             case StmtKind::EnumDecl: {
                 auto* decl = static_cast<const EnumDeclStmt*>(stmt);
                 add_known_type(decl->name, TypeKind::User, decl->line);
+                
+                // Add rawValue property if enum has raw type
+                if (decl->raw_type.has_value()) {
+                    TypeInfo raw_value_type = type_from_annotation(decl->raw_type.value(), decl->line);
+                    type_properties_[decl->name].emplace("rawValue", raw_value_type);
+                }
+                
                 for (const auto& enum_case : decl->cases) {
                     enum_cases_[decl->name].insert(enum_case.name);
                 }
@@ -207,11 +214,11 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                     std::vector<TypeInfo> params;
                     params.reserve(method->params.size());
                     for (const auto& param : method->params) {
-                        params.push_back(type_from_annotation(param.type, method->line));
+                        params.push_back(type_from_annotation(param.type, decl->line));
                     }
                     TypeInfo return_type = TypeInfo::builtin("Void");
                     if (method->return_type.has_value()) {
-                        return_type = type_from_annotation(method->return_type.value(), method->line);
+                        return_type = type_from_annotation(method->return_type.value(), decl->line);
                     }
                     type_methods_[decl->name].emplace(
                         method->name,
@@ -236,11 +243,11 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                         std::vector<TypeInfo> params;
                         params.reserve(method->params.size());
                         for (const auto& param : method->params) {
-                            params.push_back(type_from_annotation(param.type, method->line));
+                            params.push_back(type_from_annotation(param.type, decl->line));
                         }
                         TypeInfo return_type = TypeInfo::builtin("Void");
                         if (method->return_type.has_value()) {
-                            return_type = type_from_annotation(method->return_type.value(), method->line);
+                            return_type = type_from_annotation(method->return_type.value(), decl->line);
                         }
                         type_methods_[decl->extended_type].emplace(
                             method->name,
@@ -1148,7 +1155,9 @@ TypeChecker::TypeInfo TypeChecker::check_closure_expr(const ClosureExpr* expr) {
         return_type = type_from_annotation(expr->return_type.value(), expr->line);
     }
     function_stack_.push_back(FunctionContext{return_type});
-    check_block(expr->body.get());
+    for (const auto& stmt : expr->body) {
+        check_stmt(stmt.get());
+    }
     function_stack_.pop_back();
     exit_scope();
     return TypeInfo::function(params, return_type);
