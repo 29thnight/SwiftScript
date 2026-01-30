@@ -101,11 +101,33 @@ TypeAnnotation Parser::parse_type_annotation() {
     ta.name = std::string(name_tok.lexeme);
     ta.is_optional = false;
 
+    if (match(TokenType::Less)) {
+        do {
+            ta.generic_args.push_back(parse_type_annotation());
+        } while (match(TokenType::Comma));
+        consume(TokenType::Greater, "Expected '>' after generic arguments.");
+    }
+
     // Check for trailing '?' to mark optional
     if (match(TokenType::Question)) {
         ta.is_optional = true;
     }
     return ta;
+}
+
+std::vector<std::string> Parser::parse_generic_params() {
+    std::vector<std::string> params;
+    if (!match(TokenType::Less)) {
+        return params;
+    }
+
+    do {
+        const Token& param_tok = consume(TokenType::Identifier, "Expected generic parameter name.");
+        params.push_back(std::string(param_tok.lexeme));
+    } while (match(TokenType::Comma));
+
+    consume(TokenType::Greater, "Expected '>' after generic parameter list.");
+    return params;
 }
 
 // ============================================================
@@ -254,8 +276,14 @@ StmtPtr Parser::import_declaration() {
 
 StmtPtr Parser::func_declaration() {
     advance();  // consume 'func'
+    auto is_operator_name = [](TokenType type) {
+        return TokenUtils::is_binary_operator(type) ||
+               TokenUtils::is_unary_operator(type) ||
+               TokenUtils::is_comparison_operator(type);
+    };
+
     const Token& name_tok = ([&]() -> const Token& {
-        if (check(TokenType::Identifier) || check(TokenType::Init)) {
+        if (check(TokenType::Identifier) || check(TokenType::Init) || is_operator_name(peek().type)) {
             return advance();
         }
         error(peek(), "Expected function name.");
@@ -264,6 +292,7 @@ StmtPtr Parser::func_declaration() {
     auto stmt = std::make_unique<FuncDeclStmt>();
     stmt->line = name_tok.line;
     stmt->name = std::string(name_tok.lexeme);
+    stmt->generic_params = parse_generic_params();
 
     // Parameter list
     consume(TokenType::LeftParen, "Expected '(' after function name.");
@@ -286,6 +315,7 @@ const Token& name_tok = consume(TokenType::Identifier, "Expected class name.");
 auto stmt = std::make_unique<ClassDeclStmt>();
 stmt->line = name_tok.line;
 stmt->name = std::string(name_tok.lexeme);
+stmt->generic_params = parse_generic_params();
 
 // Parse superclass and protocol conformances: class MyClass: SuperClass, Protocol1, Protocol2 { ... }
 if (match(TokenType::Colon)) {
@@ -418,6 +448,7 @@ const Token& name_tok = consume(TokenType::Identifier, "Expected struct name.");
 auto stmt = std::make_unique<StructDeclStmt>();
 stmt->line = name_tok.line;
 stmt->name = std::string(name_tok.lexeme);
+stmt->generic_params = parse_generic_params();
 
 // Parse protocol conformances: struct MyStruct: Protocol1, Protocol2 { ... }
 if (match(TokenType::Colon)) {
@@ -460,13 +491,24 @@ while (!check(TokenType::RightBrace) && !is_at_end()) {
     // Method declaration: [access] [static] [mutating] func name(...) -> Type { ... }
     if (check(TokenType::Func)) {
         advance(); // consume 'func'
-        const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+        auto is_operator_name = [](TokenType type) {
+            return TokenUtils::is_binary_operator(type) ||
+                   TokenUtils::is_unary_operator(type) ||
+                   TokenUtils::is_comparison_operator(type);
+        };
+        const Token& method_name = ([&]() -> const Token& {
+            if (check(TokenType::Identifier) || is_operator_name(peek().type)) {
+                return advance();
+            }
+            error(peek(), "Expected method name.");
+        })();
 
         auto method = std::make_unique<StructMethodDecl>();
         method->name = std::string(method_name.lexeme);
         method->is_mutating = is_mutating;
         method->is_static = is_static;
         method->access_level = access_level;
+        method->generic_params = parse_generic_params();
 
         // Parameter list
         consume(TokenType::LeftParen, "Expected '(' after method name.");
@@ -545,6 +587,7 @@ StmtPtr Parser::enum_declaration() {
     auto stmt = std::make_unique<EnumDeclStmt>();
     stmt->line = name_tok.line;
     stmt->name = std::string(name_tok.lexeme);
+    stmt->generic_params = parse_generic_params();
 
     // Optional raw type: enum Status: Int { ... }
     if (match(TokenType::Colon)) {
@@ -596,10 +639,21 @@ StmtPtr Parser::enum_declaration() {
         // Method declaration: func describe() -> String { ... }
         if (check(TokenType::Func)) {
             advance(); // consume 'func'
-            const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+            auto is_operator_name = [](TokenType type) {
+                return TokenUtils::is_binary_operator(type) ||
+                       TokenUtils::is_unary_operator(type) ||
+                       TokenUtils::is_comparison_operator(type);
+            };
+            const Token& method_name = ([&]() -> const Token& {
+                if (check(TokenType::Identifier) || is_operator_name(peek().type)) {
+                    return advance();
+                }
+                error(peek(), "Expected method name.");
+            })();
 
             auto method = std::make_unique<StructMethodDecl>();
             method->name = std::string(method_name.lexeme);
+            method->generic_params = parse_generic_params();
 
             // Parameter list
             consume(TokenType::LeftParen, "Expected '(' after method name.");
@@ -685,6 +739,7 @@ StmtPtr Parser::protocol_declaration() {
     auto stmt = std::make_unique<ProtocolDeclStmt>();
     stmt->line = name_tok.line;
     stmt->name = std::string(name_tok.lexeme);
+    stmt->generic_params = parse_generic_params();
 
     // Optional protocol inheritance: protocol MyProtocol: BaseProtocol1, BaseProtocol2 { ... }
     if (match(TokenType::Colon)) {
@@ -699,10 +754,21 @@ StmtPtr Parser::protocol_declaration() {
     while (!check(TokenType::RightBrace) && !is_at_end()) {
         // Method requirement: func methodName(param: Type) -> ReturnType
         if (match(TokenType::Func)) {
-            const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+            auto is_operator_name = [](TokenType type) {
+                return TokenUtils::is_binary_operator(type) ||
+                       TokenUtils::is_unary_operator(type) ||
+                       TokenUtils::is_comparison_operator(type);
+            };
+            const Token& method_name = ([&]() -> const Token& {
+                if (check(TokenType::Identifier) || is_operator_name(peek().type)) {
+                    return advance();
+                }
+                error(peek(), "Expected method name.");
+            })();
 
             ProtocolMethodRequirement method_req;
             method_req.name = std::string(method_name.lexeme);
+            method_req.generic_params = parse_generic_params();
 
             // Parameter list
             consume(TokenType::LeftParen, "Expected '(' after method name.");
@@ -760,11 +826,22 @@ StmtPtr Parser::protocol_declaration() {
                 error(previous(), "Expected 'func' after 'mutating'.");
             }
 
-            const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+            auto is_operator_name = [](TokenType type) {
+                return TokenUtils::is_binary_operator(type) ||
+                       TokenUtils::is_unary_operator(type) ||
+                       TokenUtils::is_comparison_operator(type);
+            };
+            const Token& method_name = ([&]() -> const Token& {
+                if (check(TokenType::Identifier) || is_operator_name(peek().type)) {
+                    return advance();
+                }
+                error(peek(), "Expected method name.");
+            })();
 
             ProtocolMethodRequirement method_req;
             method_req.name = std::string(method_name.lexeme);
             method_req.is_mutating = true;
+            method_req.generic_params = parse_generic_params();
 
             // Parameter list
             consume(TokenType::LeftParen, "Expected '(' after method name.");
@@ -836,13 +913,24 @@ StmtPtr Parser::extension_declaration() {
         // Method declaration: [access] [static] [mutating] func name(...) -> Type { ... }
         if (check(TokenType::Func)) {
             advance(); // consume 'func'
-            const Token& method_name = consume(TokenType::Identifier, "Expected method name.");
+            auto is_operator_name = [](TokenType type) {
+                return TokenUtils::is_binary_operator(type) ||
+                       TokenUtils::is_unary_operator(type) ||
+                       TokenUtils::is_comparison_operator(type);
+            };
+            const Token& method_name = ([&]() -> const Token& {
+                if (check(TokenType::Identifier) || is_operator_name(peek().type)) {
+                    return advance();
+                }
+                error(peek(), "Expected method name.");
+            })();
 
             auto method = std::make_unique<StructMethodDecl>();
             method->name = std::string(method_name.lexeme);
             method->is_mutating = is_mutating;
             method->is_static = is_static;
             method->access_level = access_level;
+            method->generic_params = parse_generic_params();
 
             // Parameter list
             consume(TokenType::LeftParen, "Expected '(' after method name.");

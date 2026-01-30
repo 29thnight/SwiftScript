@@ -77,6 +77,7 @@ private:
 
     // ---- Type annotation ----
     TypeAnnotation parse_type_annotation();
+    std::vector<std::string> parse_generic_params();
 
     // ---- Utilities ----
     const Token& advance();

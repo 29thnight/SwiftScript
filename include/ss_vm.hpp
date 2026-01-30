@@ -109,6 +109,7 @@ namespace swiftscript {
         bool is_truthy(const Value& value) const;
         Value get_property(const Value& object, const std::string& name);
         bool find_method_on_class(ClassObject* klass, const std::string& name, Value& out_method) const;
+        std::optional<Value> call_operator_overload(const Value& left, const Value& right, const std::string& name);
         void build_param_defaults(const FunctionPrototype& proto,
                                   std::vector<Value>& defaults,
                                   std::vector<bool>& has_defaults);

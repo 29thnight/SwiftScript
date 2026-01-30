@@ -25,6 +25,7 @@ struct TypeAnnotation {
     bool is_function_type{false};
     std::vector<TypeAnnotation> param_types;
     std::shared_ptr<TypeAnnotation> return_type; // nullptr if not a function type
+    std::vector<TypeAnnotation> generic_args;
 };
 
 // ---- Forward declarations ----
@@ -458,6 +459,7 @@ struct DoCatchStmt : Stmt {
 
 struct FuncDeclStmt : Stmt {
     std::string name;
+    std::vector<std::string> generic_params;
     std::vector<ParamDecl> params;
     std::unique_ptr<BlockStmt> body;
     std::optional<TypeAnnotation> return_type;
@@ -470,6 +472,7 @@ struct FuncDeclStmt : Stmt {
 
 struct ClassDeclStmt : Stmt {
     std::string name;
+    std::vector<std::string> generic_params;
     std::optional<std::string> superclass_name;
     std::vector<std::string> protocol_conformances;  // Protocols this class conforms to
     std::vector<std::unique_ptr<FuncDeclStmt>> methods;
@@ -481,6 +484,7 @@ struct ClassDeclStmt : Stmt {
 // Struct method declaration with mutating flag
 struct StructMethodDecl {
     std::string name;
+    std::vector<std::string> generic_params;
     std::vector<ParamDecl> params;
     std::unique_ptr<BlockStmt> body;
     std::optional<TypeAnnotation> return_type;
@@ -493,6 +497,7 @@ struct StructMethodDecl {
 // Struct declaration: struct Point { var x: Int; func distance() -> Float { ... } }
 struct StructDeclStmt : Stmt {
     std::string name;
+    std::vector<std::string> generic_params;
     std::vector<std::string> protocol_conformances;  // Protocols this struct conforms to
     std::vector<std::unique_ptr<VarDeclStmt>> properties;  // Stored properties
     std::vector<std::unique_ptr<StructMethodDecl>> methods;
@@ -512,6 +517,7 @@ struct EnumCaseDecl {
 // Enum declaration: enum Direction { case north; case south }
 struct EnumDeclStmt : Stmt {
     std::string name;
+    std::vector<std::string> generic_params;
     std::vector<EnumCaseDecl> cases;
     std::optional<TypeAnnotation> raw_type;  // Type of raw values (if any)
     std::vector<std::unique_ptr<StructMethodDecl>> methods;  // Methods and computed properties
@@ -531,6 +537,7 @@ struct ImportStmt : Stmt {
 // Protocol method requirement
 struct ProtocolMethodRequirement {
     std::string name;
+    std::vector<std::string> generic_params;
     std::vector<ParamDecl> params;
     std::optional<TypeAnnotation> return_type;
     bool is_mutating{false};
@@ -547,6 +554,7 @@ struct ProtocolPropertyRequirement {
 // Protocol declaration: protocol Drawable { func draw(); var size: Int { get set } }
 struct ProtocolDeclStmt : Stmt {
     std::string name;
+    std::vector<std::string> generic_params;
     std::vector<ProtocolMethodRequirement> method_requirements;
     std::vector<ProtocolPropertyRequirement> property_requirements;
     std::vector<std::string> inherited_protocols;  // Protocol inheritance
