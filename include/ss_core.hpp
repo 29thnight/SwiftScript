@@ -40,7 +40,8 @@ enum class ObjectType : uint8_t {
     Range,
     Upvalue,
     BuiltinMethod,
-    BoundMethod
+    BoundMethod,
+    Tuple            // Tuple object
 };
 
 // Utility: ObjectType to string
@@ -64,6 +65,7 @@ inline const char* object_type_name(ObjectType t) {
         case ObjectType::Range:    return "Range";
         case ObjectType::Upvalue:  return "Upvalue";
         case ObjectType::BuiltinMethod: return "BuiltinMethod";
+        case ObjectType::Tuple: return "Tuple";
     }
     return "Unknown";
 }

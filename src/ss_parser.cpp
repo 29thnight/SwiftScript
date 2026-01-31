@@ -74,28 +74,83 @@ bool Parser::is_at_end() const {
 // ============================================================
 
 TypeAnnotation Parser::parse_type_annotation() {
-    // Function type: (ParamType, ...) -> ReturnType
-    if (match(TokenType::LeftParen)) {
+// Parenthesized type: could be Function Type or Tuple Type
+if (match(TokenType::LeftParen)) {
+    // Collect elements inside parentheses
+    struct ParsedElement {
+        std::optional<std::string> label;
+        TypeAnnotation type;
+    };
+    std::vector<ParsedElement> elements;
+
+    if (!check(TokenType::RightParen)) {
+        do {
+            std::optional<std::string> label;
+            // Check for "identifier :" pattern which indicates a labeled tuple element
+            if (check(TokenType::Identifier)) {
+                // Peek next token to see if it is a colon
+                if (current_ + 1 < tokens_.size() && tokens_[current_ + 1].type == TokenType::Colon) {
+                    label = advance().lexeme;
+                    advance(); // consume ':'
+                }
+            }
+                
+            elements.push_back({label, parse_type_annotation()});
+        } while (match(TokenType::Comma));
+    }
+
+    consume(TokenType::RightParen, "Expected ')' after type list.");
+
+    // Check if followed by '->', which means it's a function type
+    if (match(TokenType::Arrow)) {
         TypeAnnotation ta;
         ta.is_function_type = true;
         ta.name = "Function";
 
-        if (!check(TokenType::RightParen)) {
-            do {
-                ta.param_types.push_back(parse_type_annotation());
-            } while (match(TokenType::Comma));
+        for (auto& elem : elements) {
+            // For function types, we currently discard external argument labels in the type system representation
+            // or the AST doesn't support them in param_types vector yet.
+            ta.param_types.push_back(std::move(elem.type));
         }
-        consume(TokenType::RightParen, "Expected ')' in function type.");
-        consume(TokenType::Arrow, "Expected '->' in function type.");
+            
         ta.return_type = std::make_shared<TypeAnnotation>(parse_type_annotation());
 
         if (match(TokenType::Question)) {
             ta.is_optional = true;
         }
         return ta;
-    }
+    } else {
+        // It is a tuple type
+            
+        // Special case: Single unnamed element in parens is just that type (grouping)
+        // e.g. (Int) is same as Int
+        if (elements.size() == 1 && !elements[0].label.has_value()) {
+            TypeAnnotation ta = std::move(elements[0].type);
+            if (match(TokenType::Question)) {
+                ta.is_optional = true;
+            }
+            return ta;
+        }
 
-    // Simple type: TypeName or TypeName?
+        TypeAnnotation ta;
+        ta.is_tuple_type = true;
+        ta.name = "Tuple";
+            
+        for (auto& elem : elements) {
+            TupleTypeElement tte;
+            tte.label = elem.label;
+            tte.type = std::make_shared<TypeAnnotation>(std::move(elem.type));
+            ta.tuple_elements.push_back(std::move(tte));
+        }
+
+        if (match(TokenType::Question)) {
+            ta.is_optional = true;
+        }
+        return ta;
+    }
+}
+
+// Simple type: TypeName or TypeName?
     const Token& name_tok = consume(TokenType::Identifier, "Expected type name.");
     TypeAnnotation ta;
     ta.name = std::string(name_tok.lexeme);
@@ -220,8 +275,15 @@ StmtPtr Parser::declaration() {
 StmtPtr Parser::var_declaration() {
     // var x: Int? = expr
     // let x = expr
+    // let (a, b) = tuple  -- Tuple destructuring
     bool is_let = check(TokenType::Let);
+    uint32_t start_line = peek().line;
     advance();  // consume 'var' or 'let'
+
+    // Check for tuple destructuring: let (a, b) = ...
+    if (check(TokenType::LeftParen)) {
+        return parse_tuple_destructuring(is_let, start_line);
+    }
 
     auto stmt = parse_variable_decl(is_let);
 
@@ -303,6 +365,54 @@ std::unique_ptr<VarDeclStmt> Parser::parse_variable_decl(bool is_let) {
             consume(TokenType::RightBrace, "Expected '}' after property observers.");
         }
     }
+
+    return stmt;
+}
+
+StmtPtr Parser::parse_tuple_destructuring(bool is_let, uint32_t line) {
+    // Parse: (a, b) = expr  or  (x: a, y: b) = expr
+    consume(TokenType::LeftParen, "Expected '(' for tuple destructuring.");
+
+    auto stmt = std::make_unique<TupleDestructuringStmt>();
+    stmt->line = line;
+    stmt->is_let = is_let;
+
+    // Parse binding patterns
+    if (!check(TokenType::RightParen)) {
+        do {
+            TupleDestructuringElement elem;
+
+            // Check for label: pattern (e.g., x: a) or wildcard (_)
+            if (check(TokenType::Identifier)) {
+                const Token& first = advance();
+                // Check for wildcard pattern
+                if (first.lexeme == "_") {
+                    elem.name = "_";
+                } else if (check(TokenType::Colon)) {
+                    // This is label: name
+                    advance();  // consume ':'
+                    elem.label = std::string(first.lexeme);
+                    const Token& name_tok = consume(TokenType::Identifier, "Expected variable name after label.");
+                    elem.name = std::string(name_tok.lexeme);
+                } else {
+                    // Just a name without label
+                    elem.name = std::string(first.lexeme);
+                }
+            } else {
+                error(peek(), "Expected variable name or underscore in tuple destructuring.");
+            }
+
+            stmt->bindings.push_back(std::move(elem));
+        } while (match(TokenType::Comma));
+    }
+
+    consume(TokenType::RightParen, "Expected ')' after tuple destructuring pattern.");
+    consume(TokenType::Equal, "Expected '=' after tuple destructuring pattern.");
+
+    stmt->initializer = expression();
+
+    // Semicolons are optional
+    match(TokenType::Semicolon);
 
     return stmt;
 }
@@ -1656,12 +1766,22 @@ ExprPtr Parser::postfix() {
             chain->line = line;
             expr = std::move(chain);
         } else if (match(TokenType::Dot)) {
-            // Member access: expr.member
+            // Member access: expr.member or tuple index: expr.0, expr.1
             uint32_t line = previous().line;
-            const Token& member = consume(TokenType::Identifier, "Expected member name after '.'.");
-            auto mem = std::make_unique<MemberExpr>(std::move(expr), std::string(member.lexeme));
-            mem->line = line;
-            expr = std::move(mem);
+
+            // Check for tuple index access: tuple.0, tuple.1, etc.
+            if (check(TokenType::Integer)) {
+                Token index_tok = advance();
+                size_t index = static_cast<size_t>(index_tok.value.int_value);
+                auto tuple_mem = std::make_unique<TupleMemberExpr>(std::move(expr), index);
+                tuple_mem->line = line;
+                expr = std::move(tuple_mem);
+            } else {
+                const Token& member = consume(TokenType::Identifier, "Expected member name after '.'.");
+                auto mem = std::make_unique<MemberExpr>(std::move(expr), std::string(member.lexeme));
+                mem->line = line;
+                expr = std::move(mem);
+            }
         } else if (match(TokenType::LeftParen)) {
             // Function call: expr(args...) or expr(name: value, ...)
             uint32_t line = previous().line;
@@ -1826,11 +1946,92 @@ ExprPtr Parser::primary() {
         return ident;
     }
 
-    // Grouped expression: ( expr )
+    // Grouped expression or tuple: ( expr ) or (1, 2) or (x: 1, y: 2)
     if (match(TokenType::LeftParen)) {
-        ExprPtr expr = expression();
+        uint32_t line = previous().line;
+
+        // Empty tuple: ()
+        if (match(TokenType::RightParen)) {
+            auto tuple = std::make_unique<TupleLiteralExpr>();
+            tuple->line = line;
+            return tuple;
+        }
+
+        // Parse first element - check if it's a named element (label: value)
+        std::vector<TupleElement> elements;
+        bool is_tuple = false;
+
+        // Save position to potentially backtrack
+        size_t saved_pos = current_;
+
+        // Check if first element is labeled: identifier followed by ':'
+        std::optional<std::string> first_label;
+        if (check(TokenType::Identifier)) {
+            Token potential_label = advance();
+            if (match(TokenType::Colon)) {
+                // This is a labeled element
+                first_label = std::string(potential_label.lexeme);
+                is_tuple = true;  // Labeled elements mean it's definitely a tuple
+            } else {
+                // Not a label, restore position
+                current_ = saved_pos;
+            }
+        }
+
+        ExprPtr first_expr = expression();
+
+        // Check for comma - indicates tuple
+        if (match(TokenType::Comma)) {
+            is_tuple = true;
+
+            TupleElement first_elem;
+            first_elem.label = first_label;
+            first_elem.value = std::move(first_expr);
+            elements.push_back(std::move(first_elem));
+
+            // Parse remaining elements
+            do {
+                if (check(TokenType::RightParen)) break;  // trailing comma
+
+                TupleElement elem;
+
+                // Check for labeled element
+                size_t elem_saved_pos = current_;
+                if (check(TokenType::Identifier)) {
+                    Token potential_label = advance();
+                    if (match(TokenType::Colon)) {
+                        elem.label = std::string(potential_label.lexeme);
+                    } else {
+                        current_ = elem_saved_pos;
+                    }
+                }
+
+                elem.value = expression();
+                elements.push_back(std::move(elem));
+            } while (match(TokenType::Comma));
+
+            consume(TokenType::RightParen, "Expected ')' after tuple elements.");
+            auto tuple = std::make_unique<TupleLiteralExpr>(std::move(elements));
+            tuple->line = line;
+            return tuple;
+        }
+
+        // If we have a label but no comma, it's still a tuple (single-element named tuple)
+        if (first_label.has_value()) {
+            TupleElement first_elem;
+            first_elem.label = first_label;
+            first_elem.value = std::move(first_expr);
+            elements.push_back(std::move(first_elem));
+
+            consume(TokenType::RightParen, "Expected ')' after tuple element.");
+            auto tuple = std::make_unique<TupleLiteralExpr>(std::move(elements));
+            tuple->line = line;
+            return tuple;
+        }
+
+        // Just a grouped expression: (expr)
         consume(TokenType::RightParen, "Expected ')' after expression.");
-        return expr;
+        return first_expr;
     }
 
     // Array or Dictionary literal: [ ... ]

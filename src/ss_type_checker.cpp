@@ -6,29 +6,38 @@
 namespace swiftscript {
 
 TypeChecker::TypeInfo TypeChecker::TypeInfo::unknown() {
-    return TypeInfo{"Unknown", false, TypeKind::Unknown, {}, nullptr};
+    return TypeInfo{"Unknown", false, TypeKind::Unknown, {}, nullptr, {}};
 }
 
 TypeChecker::TypeInfo TypeChecker::TypeInfo::builtin(std::string name, bool optional) {
-    return TypeInfo{std::move(name), optional, TypeKind::Builtin, {}, nullptr};
+    return TypeInfo{std::move(name), optional, TypeKind::Builtin, {}, nullptr, {}};
 }
 
 TypeChecker::TypeInfo TypeChecker::TypeInfo::user(std::string name, bool optional) {
-    return TypeInfo{std::move(name), optional, TypeKind::User, {}, nullptr};
+    return TypeInfo{std::move(name), optional, TypeKind::User, {}, nullptr, {}};
 }
 
 TypeChecker::TypeInfo TypeChecker::TypeInfo::protocol(std::string name, bool optional) {
-    return TypeInfo{std::move(name), optional, TypeKind::Protocol, {}, nullptr};
+    return TypeInfo{std::move(name), optional, TypeKind::Protocol, {}, nullptr, {}};
 }
 
 TypeChecker::TypeInfo TypeChecker::TypeInfo::function(std::vector<TypeInfo> params, TypeInfo result) {
-    TypeInfo info{"Function", false, TypeKind::Function, std::move(params), nullptr};
+    TypeInfo info{"Function", false, TypeKind::Function, std::move(params), nullptr, {}};
     info.return_type = std::make_shared<TypeInfo>(std::move(result));
     return info;
 }
 
 TypeChecker::TypeInfo TypeChecker::TypeInfo::generic(std::string name, bool optional) {
-    return TypeInfo{std::move(name), optional, TypeKind::GenericParameter, {}, nullptr};
+    return TypeInfo{std::move(name), optional, TypeKind::GenericParameter, {}, nullptr, {}};
+}
+
+TypeChecker::TypeInfo TypeChecker::TypeInfo::tuple(std::vector<TupleElementInfo> elements) {
+    TypeInfo info;
+    info.name = "Tuple";
+    info.is_optional = false;
+    info.kind = TypeKind::Tuple;
+    info.tuple_elements = std::move(elements);
+    return info;
 }
 
 void TypeChecker::check(const std::vector<StmtPtr>& program) {
@@ -496,6 +505,9 @@ void TypeChecker::check_stmt(const Stmt* stmt) {
         case StmtKind::VarDecl:
             check_var_decl(static_cast<const VarDeclStmt*>(stmt));
             break;
+        case StmtKind::TupleDestructuring:
+            check_tuple_destructuring(static_cast<const TupleDestructuringStmt*>(stmt));
+            break;
         case StmtKind::If:
             check_if_stmt(static_cast<const IfStmt*>(stmt));
             break;
@@ -596,6 +608,57 @@ void TypeChecker::check_var_decl(const VarDeclStmt* stmt) {
         check_block(stmt->setter_body.get());
         function_stack_.pop_back();
         exit_scope();
+    }
+}
+
+void TypeChecker::check_tuple_destructuring(const TupleDestructuringStmt* stmt) {
+    if (!stmt->initializer) {
+        error("Tuple destructuring requires an initializer", stmt->line);
+        return;
+    }
+
+    TypeInfo init_type = check_expr(stmt->initializer.get());
+
+    if (init_type.kind != TypeKind::Tuple) {
+        error("Cannot destructure non-tuple type '" + init_type.name + "'", stmt->line);
+        return;
+    }
+
+    if (stmt->bindings.size() != init_type.tuple_elements.size()) {
+        error("Tuple destructuring pattern has " + std::to_string(stmt->bindings.size()) +
+              " elements but tuple has " + std::to_string(init_type.tuple_elements.size()), stmt->line);
+        return;
+    }
+
+    for (size_t i = 0; i < stmt->bindings.size(); ++i) {
+        const auto& binding = stmt->bindings[i];
+
+        // Skip wildcard patterns
+        if (binding.name == "_") {
+            continue;
+        }
+
+        TypeInfo elem_type;
+        if (binding.label.has_value()) {
+            // Label-based binding: find the element by label
+            bool found = false;
+            for (const auto& elem : init_type.tuple_elements) {
+                if (elem.label.has_value() && elem.label.value() == binding.label.value()) {
+                    elem_type = *elem.type;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                error("Tuple has no element with label '" + binding.label.value() + "'", stmt->line);
+                elem_type = TypeInfo::unknown();
+            }
+        } else {
+            // Index-based binding
+            elem_type = *init_type.tuple_elements[i].type;
+        }
+
+        declare_symbol(binding.name, elem_type, stmt->line, stmt->is_let);
     }
 }
 
@@ -994,6 +1057,10 @@ TypeChecker::TypeInfo TypeChecker::check_expr(const Expr* expr) {
             return check_try_expr(static_cast<const TryExpr*>(expr));
         case ExprKind::Super:
             return TypeInfo::unknown();
+        case ExprKind::TupleLiteral:
+            return check_tuple_literal_expr(static_cast<const TupleLiteralExpr*>(expr));
+        case ExprKind::TupleMember:
+            return check_tuple_member_expr(static_cast<const TupleMemberExpr*>(expr));
     }
     return TypeInfo::unknown();
 }
@@ -1334,6 +1401,17 @@ TypeChecker::TypeInfo TypeChecker::check_member_expr(const MemberExpr* expr) {
         return TypeInfo::user(object.name);
     }
 
+    // Handle tuple label access
+    if (object.kind == TypeKind::Tuple) {
+        for (const auto& elem : object.tuple_elements) {
+            if (elem.label.has_value() && elem.label.value() == expr->member) {
+                return *elem.type;
+            }
+        }
+        error("Tuple has no element with label '" + expr->member + "'", expr->line);
+        return TypeInfo::unknown();
+    }
+
     if (auto member = lookup_member(object.name)) {
         return *member;
     }
@@ -1510,6 +1588,47 @@ TypeChecker::TypeInfo TypeChecker::check_try_expr(const TryExpr* expr) {
     return inner;
 }
 
+TypeChecker::TypeInfo TypeChecker::check_tuple_literal_expr(const TupleLiteralExpr* expr) {
+    std::vector<TupleElementInfo> elements;
+    for (const auto& elem : expr->elements) {
+        TupleElementInfo info;
+        info.label = elem.label;
+        info.type = std::make_shared<TypeInfo>(check_expr(elem.value.get()));
+        elements.push_back(std::move(info));
+    }
+    return TypeInfo::tuple(std::move(elements));
+}
+
+TypeChecker::TypeInfo TypeChecker::check_tuple_member_expr(const TupleMemberExpr* expr) {
+    TypeInfo tuple_type = check_expr(expr->tuple.get());
+
+    if (tuple_type.kind != TypeKind::Tuple) {
+        error("Cannot access tuple member on non-tuple type '" + tuple_type.name + "'", expr->line);
+        return TypeInfo::unknown();
+    }
+
+    if (std::holds_alternative<size_t>(expr->member)) {
+        // Index access: tuple.0, tuple.1
+        size_t index = std::get<size_t>(expr->member);
+        if (index >= tuple_type.tuple_elements.size()) {
+            error("Tuple index " + std::to_string(index) + " out of bounds for tuple with " +
+                  std::to_string(tuple_type.tuple_elements.size()) + " elements", expr->line);
+            return TypeInfo::unknown();
+        }
+        return *tuple_type.tuple_elements[index].type;
+    } else {
+        // Label access: tuple.x, tuple.y
+        const std::string& label = std::get<std::string>(expr->member);
+        for (const auto& elem : tuple_type.tuple_elements) {
+            if (elem.label.has_value() && elem.label.value() == label) {
+                return *elem.type;
+            }
+        }
+        error("Tuple has no element with label '" + label + "'", expr->line);
+        return TypeInfo::unknown();
+    }
+}
+
 TypeChecker::TypeInfo TypeChecker::type_from_annotation(const TypeAnnotation& annotation, uint32_t line) {
     if (annotation.is_function_type) {
         std::vector<TypeInfo> params;
@@ -1526,6 +1645,25 @@ TypeChecker::TypeInfo TypeChecker::type_from_annotation(const TypeAnnotation& an
             func_type.is_optional = true;
         }
         return func_type;
+    }
+
+    if (annotation.is_tuple_type) {
+        std::vector<TupleElementInfo> elements;
+        for (const auto& elem : annotation.tuple_elements) {
+            TupleElementInfo info;
+            info.label = elem.label;
+            if (elem.type) {
+                info.type = std::make_shared<TypeInfo>(type_from_annotation(*elem.type, line));
+            } else {
+                info.type = std::make_shared<TypeInfo>(TypeInfo::unknown());
+            }
+            elements.push_back(std::move(info));
+        }
+        TypeInfo tuple_type = TypeInfo::tuple(std::move(elements));
+        if (annotation.is_optional) {
+            tuple_type.is_optional = true;
+        }
+        return tuple_type;
     }
 
     for (const auto& generic_arg : annotation.generic_args) {

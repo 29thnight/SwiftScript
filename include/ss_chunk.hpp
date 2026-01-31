@@ -65,6 +65,7 @@ struct Protocol {
         OP_TRUE,
         OP_FALSE,
         OP_POP,
+        OP_DUP,  // Duplicate top of stack
 
         // Arithmetic
         OP_ADD,
@@ -143,6 +144,11 @@ struct Protocol {
         OP_DICT,               // Create dict from N key-value pairs on stack
         OP_GET_SUBSCRIPT,      // array[index] or dict[key]
         OP_SET_SUBSCRIPT,      // array[index] = value or dict[key] = value
+
+        // Tuple operations
+        OP_TUPLE,              // Create tuple from N elements on stack
+        OP_GET_TUPLE_INDEX,    // tuple.0, tuple.1 (index access)
+        OP_GET_TUPLE_LABEL,    // tuple.x, tuple.y (label access)
 
         // Struct operations
         OP_STRUCT,             // Create struct type object

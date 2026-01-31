@@ -86,6 +86,7 @@ private:
     void compile_expr(Expr* expr);
 
     void visit(VarDeclStmt* stmt);
+    void visit(TupleDestructuringStmt* stmt);
     void visit(IfStmt* stmt);
     void visit(IfLetStmt* stmt);
     void visit(GuardLetStmt* stmt);
@@ -123,6 +124,8 @@ private:
     void visit(ArrayLiteralExpr* expr);
     void visit(DictLiteralExpr* expr);
     void visit(SubscriptExpr* expr);
+    void visit(TupleLiteralExpr* expr);
+    void visit(TupleMemberExpr* expr);
     void visit(TernaryExpr* expr);
     void visit(ClosureExpr* expr);
     void visit(TypeCastExpr* expr);

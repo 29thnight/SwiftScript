@@ -7,6 +7,7 @@
 #include <string>
 #include <optional>
 #include <utility>
+#include <variant>
 
 namespace swiftscript {
 
@@ -18,14 +19,25 @@ enum class AccessLevel {
     Private       // Accessible only within the same declaration
 };
 
+// Forward declaration for TypeAnnotation
+struct TypeAnnotation;
+
+// ---- Tuple type element ----
+struct TupleTypeElement {
+    std::optional<std::string> label;  // Named element label
+    std::shared_ptr<TypeAnnotation> type;  // Use shared_ptr to avoid forward declaration issues
+};
+
 // ---- Type annotation ----
 struct TypeAnnotation {
     std::string name;
     bool is_optional{false};
     bool is_function_type{false};
+    bool is_tuple_type{false};         // (Int, String) or (x: Int, y: String)
     std::vector<TypeAnnotation> param_types;
     std::shared_ptr<TypeAnnotation> return_type; // nullptr if not a function type
     std::vector<TypeAnnotation> generic_args;
+    std::vector<TupleTypeElement> tuple_elements;  // For tuple types
 };
 
 // ---- Forward declarations ----
@@ -65,6 +77,8 @@ enum class ExprKind {
     TypeCast,        // as, as?, as!
     TypeCheck,       // is
     Try,             // try expression
+    TupleLiteral,    // (1, "hello") or (x: 1, y: 2)
+    TupleMember,     // tuple.0 or tuple.x
 };
 
 struct Expr {
@@ -276,8 +290,35 @@ struct ClosureExpr : Expr {
     std::vector<std::pair<std::string, TypeAnnotation>> params;
     std::optional<TypeAnnotation> return_type;
     std::vector<StmtPtr> body;
-    
+
     ClosureExpr() : Expr(ExprKind::Closure) {}
+};
+
+// Tuple element with optional label
+struct TupleElement {
+    std::optional<std::string> label;  // Named element: (x: 1, y: 2)
+    ExprPtr value;
+};
+
+// Tuple literal: (1, "hello") or (x: 1, y: 2)
+struct TupleLiteralExpr : Expr {
+    std::vector<TupleElement> elements;
+
+    TupleLiteralExpr() : Expr(ExprKind::TupleLiteral) {}
+    explicit TupleLiteralExpr(std::vector<TupleElement> elems)
+        : Expr(ExprKind::TupleLiteral), elements(std::move(elems)) {}
+};
+
+// Tuple member access: tuple.0, tuple.1, tuple.x
+struct TupleMemberExpr : Expr {
+    ExprPtr tuple;
+    std::variant<size_t, std::string> member;  // Index (0, 1) or label ("x", "y")
+
+    TupleMemberExpr() : Expr(ExprKind::TupleMember) {}
+    TupleMemberExpr(ExprPtr t, size_t index)
+        : Expr(ExprKind::TupleMember), tuple(std::move(t)), member(index) {}
+    TupleMemberExpr(ExprPtr t, std::string label)
+        : Expr(ExprKind::TupleMember), tuple(std::move(t)), member(std::move(label)) {}
 };
 
 struct ParamDecl {
@@ -296,6 +337,7 @@ enum class StmtKind {
     Print,
     Block,
     VarDecl,
+    TupleDestructuring,  // let (a, b) = tuple
     ClassDecl,
     StructDecl,  // Struct declaration
     EnumDecl,    // Enum declaration
@@ -361,6 +403,20 @@ struct VarDeclStmt : Stmt {
     std::unique_ptr<BlockStmt> did_set_body;
     
     VarDeclStmt() : Stmt(StmtKind::VarDecl) {}
+};
+
+// Tuple destructuring: let (a, b) = tuple or var (x, y) = point
+struct TupleDestructuringElement {
+    std::string name;
+    std::optional<std::string> label;  // Optional label for named element access
+};
+
+struct TupleDestructuringStmt : Stmt {
+    std::vector<TupleDestructuringElement> bindings;
+    ExprPtr initializer;
+    bool is_let{false};
+
+    TupleDestructuringStmt() : Stmt(StmtKind::TupleDestructuring) {}
 };
 
 struct IfStmt : Stmt {

@@ -36,6 +36,7 @@ private:
     StmtPtr extension_declaration(); // Extension declaration parser
     StmtPtr import_declaration();  // Import statement parser
     std::unique_ptr<VarDeclStmt> parse_variable_decl(bool is_let);
+    StmtPtr parse_tuple_destructuring(bool is_let, uint32_t line);
     StmtPtr statement();
     StmtPtr if_statement();
     StmtPtr guard_statement();

@@ -300,6 +300,23 @@ void test_builtin_string_comparable();
 void test_builtin_int_hashable();
 void test_multiple_builtin_protocols();
 
+// Tuple tests
+void test_basic_tuple_literal();
+void test_named_tuple_literal();
+void test_tuple_index_access();
+void test_tuple_label_access();
+void test_mixed_tuple();
+void test_tuple_with_different_types();
+void test_tuple_in_variable();
+void test_nested_tuple();
+void test_tuple_destructuring_basic();
+void test_tuple_destructuring_three_elements();
+void test_tuple_destructuring_with_var();
+void test_tuple_destructuring_with_wildcard();
+void test_func_return_tuple();
+void test_func_return_named_tuple();
+void test_func_return_tuple_destructuring();
+
 } // namespace test
 } // namespace swiftscript
 
@@ -1092,6 +1109,70 @@ TEST(GenericsTest, BuiltinIntHashable) {
 
 TEST(GenericsTest, MultipleBuiltinProtocols) {
     EXPECT_NO_THROW(swiftscript::test::test_multiple_builtin_protocols());
+}
+
+// ============================================================================
+// Tuple Tests
+// ============================================================================
+
+TEST(TupleTest, BasicTupleLiteral) {
+    EXPECT_NO_THROW(swiftscript::test::test_basic_tuple_literal());
+}
+
+TEST(TupleTest, NamedTupleLiteral) {
+    EXPECT_NO_THROW(swiftscript::test::test_named_tuple_literal());
+}
+
+TEST(TupleTest, TupleIndexAccess) {
+    EXPECT_NO_THROW(swiftscript::test::test_tuple_index_access());
+}
+
+TEST(TupleTest, TupleLabelAccess) {
+    EXPECT_NO_THROW(swiftscript::test::test_tuple_label_access());
+}
+
+TEST(TupleTest, MixedTuple) {
+    EXPECT_NO_THROW(swiftscript::test::test_mixed_tuple());
+}
+
+TEST(TupleTest, TupleWithDifferentTypes) {
+    EXPECT_NO_THROW(swiftscript::test::test_tuple_with_different_types());
+}
+
+TEST(TupleTest, TupleInVariable) {
+    EXPECT_NO_THROW(swiftscript::test::test_tuple_in_variable());
+}
+
+TEST(TupleTest, NestedTuple) {
+    EXPECT_NO_THROW(swiftscript::test::test_nested_tuple());
+}
+
+TEST(TupleTest, DestructuringBasic) {
+    EXPECT_NO_THROW(swiftscript::test::test_tuple_destructuring_basic());
+}
+
+TEST(TupleTest, DestructuringThreeElements) {
+    EXPECT_NO_THROW(swiftscript::test::test_tuple_destructuring_three_elements());
+}
+
+TEST(TupleTest, DestructuringWithVar) {
+    EXPECT_NO_THROW(swiftscript::test::test_tuple_destructuring_with_var());
+}
+
+TEST(TupleTest, DestructuringWithWildcard) {
+    EXPECT_NO_THROW(swiftscript::test::test_tuple_destructuring_with_wildcard());
+}
+
+TEST(TupleTest, FuncReturnTuple) {
+    EXPECT_NO_THROW(swiftscript::test::test_func_return_tuple());
+}
+
+TEST(TupleTest, FuncReturnNamedTuple) {
+    EXPECT_NO_THROW(swiftscript::test::test_func_return_named_tuple());
+}
+
+TEST(TupleTest, FuncReturnTupleDestructuring) {
+    EXPECT_NO_THROW(swiftscript::test::test_func_return_tuple_destructuring());
 }
 
 // ============================================================================

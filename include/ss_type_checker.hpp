@@ -33,6 +33,15 @@ private:
         Protocol,
         Function,
         GenericParameter,
+        Tuple,
+    };
+
+    // Forward declaration
+    struct TypeInfo;
+
+    struct TupleElementInfo {
+        std::optional<std::string> label;
+        std::shared_ptr<TypeInfo> type;  // Use shared_ptr due to forward declaration
     };
 
     struct TypeInfo {
@@ -41,6 +50,7 @@ private:
         TypeKind kind{TypeKind::Unknown};
         std::vector<TypeInfo> param_types;
         std::shared_ptr<TypeInfo> return_type;
+        std::vector<TupleElementInfo> tuple_elements;  // For tuple types
 
         static TypeInfo unknown();
         static TypeInfo builtin(std::string name, bool optional = false);
@@ -48,6 +58,7 @@ private:
         static TypeInfo protocol(std::string name, bool optional = false);
         static TypeInfo function(std::vector<TypeInfo> params, TypeInfo result);
         static TypeInfo generic(std::string name, bool optional = false);
+        static TypeInfo tuple(std::vector<TupleElementInfo> elements);
     };
 
     struct FunctionContext {
@@ -94,6 +105,7 @@ private:
     void check_stmt(const Stmt* stmt);
     void check_block(const BlockStmt* stmt);
     void check_var_decl(const VarDeclStmt* stmt);
+    void check_tuple_destructuring(const TupleDestructuringStmt* stmt);
     void check_if_stmt(const IfStmt* stmt);
     void check_if_let_stmt(const IfLetStmt* stmt);
     void check_guard_let_stmt(const GuardLetStmt* stmt);
@@ -131,6 +143,8 @@ private:
     TypeInfo check_type_cast_expr(const TypeCastExpr* expr);
     TypeInfo check_type_check_expr(const TypeCheckExpr* expr);
     TypeInfo check_try_expr(const TryExpr* expr);
+    TypeInfo check_tuple_literal_expr(const TupleLiteralExpr* expr);
+    TypeInfo check_tuple_member_expr(const TupleMemberExpr* expr);
 
     TypeInfo type_from_annotation(const TypeAnnotation& annotation, uint32_t line);
     bool is_assignable(const TypeInfo& expected, const TypeInfo& actual) const;

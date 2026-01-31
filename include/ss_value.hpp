@@ -594,6 +594,75 @@ public:
     }
 };
 
+// Tuple object - immutable collection of named or indexed values
+class TupleObject : public Object {
+public:
+    std::vector<Value> elements;
+    std::vector<std::optional<std::string>> labels;  // Optional labels for each element
+
+    TupleObject() : Object(ObjectType::Tuple) {}
+
+    explicit TupleObject(std::vector<Value> elems)
+        : Object(ObjectType::Tuple), elements(std::move(elems)) {
+        labels.resize(elements.size());  // All unlabeled by default
+    }
+
+    TupleObject(std::vector<Value> elems, std::vector<std::optional<std::string>> lbls)
+        : Object(ObjectType::Tuple), elements(std::move(elems)), labels(std::move(lbls)) {}
+
+    std::string to_string() const override {
+        std::string result = "(";
+        for (size_t i = 0; i < elements.size(); ++i) {
+            if (i > 0) result += ", ";
+            if (labels[i].has_value()) {
+                result += labels[i].value() + ": ";
+            }
+            result += elements[i].to_string();
+        }
+        result += ")";
+        return result;
+    }
+
+    size_t memory_size() const override {
+        size_t total = sizeof(TupleObject);
+        total += elements.capacity() * sizeof(Value);
+        for (const auto& label : labels) {
+            if (label.has_value()) {
+                total += label->capacity();
+            }
+        }
+        return total;
+    }
+
+    // Get element by index
+    Value get(size_t index) const {
+        if (index < elements.size()) {
+            return elements[index];
+        }
+        return Value::null();
+    }
+
+    // Get element by label
+    Value get(const std::string& label) const {
+        for (size_t i = 0; i < labels.size(); ++i) {
+            if (labels[i].has_value() && labels[i].value() == label) {
+                return elements[i];
+            }
+        }
+        return Value::null();
+    }
+
+    // Check if tuple has a specific label
+    bool has_label(const std::string& label) const {
+        for (const auto& lbl : labels) {
+            if (lbl.has_value() && lbl.value() == label) {
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
 // Verify size constraint
 static_assert(sizeof(Value) == 16, "Value must be exactly 16 bytes");
 

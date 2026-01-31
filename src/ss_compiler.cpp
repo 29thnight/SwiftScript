@@ -69,6 +69,9 @@ void Compiler::compile_stmt(Stmt* stmt) {
         case StmtKind::VarDecl:
             visit(static_cast<VarDeclStmt*>(stmt));
             break;
+        case StmtKind::TupleDestructuring:
+            visit(static_cast<TupleDestructuringStmt*>(stmt));
+            break;
         case StmtKind::If:
             visit(static_cast<IfStmt*>(stmt));
             break;
@@ -1181,6 +1184,12 @@ void Compiler::compile_expr(Expr* expr) {
         case ExprKind::TypeCheck:
             visit(static_cast<TypeCheckExpr*>(expr));
             break;
+        case ExprKind::TupleLiteral:
+            visit(static_cast<TupleLiteralExpr*>(expr));
+            break;
+        case ExprKind::TupleMember:
+            visit(static_cast<TupleMemberExpr*>(expr));
+            break;
         default:
             throw CompilerError("Unknown expression kind", expr->line);
     }
@@ -1210,6 +1219,61 @@ void Compiler::visit(VarDeclStmt* stmt) {
     } else {
         mark_local_initialized();
     }
+}
+
+void Compiler::visit(TupleDestructuringStmt* stmt) {
+    // Compile the initializer (tuple expression)
+    compile_expr(stmt->initializer.get());
+
+    // For each binding, extract the tuple element and store it
+    for (size_t i = 0; i < stmt->bindings.size(); ++i) {
+        const auto& binding = stmt->bindings[i];
+
+        // Skip wildcard patterns
+        if (binding.name == "_") {
+            continue;
+        }
+
+        // Duplicate the tuple on the stack
+        emit_op(OpCode::OP_DUP, stmt->line);
+
+        // Get the element by index or label
+        if (binding.label.has_value()) {
+            // Access by label
+            emit_op(OpCode::OP_GET_TUPLE_LABEL, stmt->line);
+            size_t label_idx = identifier_constant(binding.label.value());
+            if (label_idx > std::numeric_limits<uint16_t>::max()) {
+                throw CompilerError("Too many identifiers", stmt->line);
+            }
+            emit_short(static_cast<uint16_t>(label_idx), stmt->line);
+        } else {
+            // Access by index
+            emit_op(OpCode::OP_GET_TUPLE_INDEX, stmt->line);
+            if (i > std::numeric_limits<uint16_t>::max()) {
+                throw CompilerError("Tuple index too large", stmt->line);
+            }
+            emit_short(static_cast<uint16_t>(i), stmt->line);
+        }
+
+        emit_op(OpCode::OP_COPY_VALUE, stmt->line);
+
+        // Declare the local variable
+        if (scope_depth_ > 0) {
+            declare_local(binding.name, false);
+            mark_local_initialized();
+        } else {
+            size_t name_idx = identifier_constant(binding.name);
+            if (name_idx > std::numeric_limits<uint16_t>::max()) {
+                throw CompilerError("Too many global variables", stmt->line);
+            }
+            emit_op(OpCode::OP_SET_GLOBAL, stmt->line);
+            emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+            emit_op(OpCode::OP_POP, stmt->line);
+        }
+    }
+
+    // Pop the original tuple from the stack
+    emit_op(OpCode::OP_POP, stmt->line);
 }
 
 void Compiler::visit(IfStmt* stmt) {
@@ -2494,6 +2558,48 @@ void Compiler::visit(SubscriptExpr* expr) {
     emit_op(OpCode::OP_GET_SUBSCRIPT, expr->line);
 }
 
+void Compiler::visit(TupleLiteralExpr* expr) {
+    // Push all elements onto the stack
+    for (const auto& elem : expr->elements) {
+        compile_expr(elem.value.get());
+    }
+
+    if (expr->elements.size() > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many elements in tuple literal", expr->line);
+    }
+
+    // Emit OP_TUPLE with element count
+    emit_op(OpCode::OP_TUPLE, expr->line);
+    emit_short(static_cast<uint16_t>(expr->elements.size()), expr->line);
+
+    // Emit labels (as string constants)
+    for (const auto& elem : expr->elements) {
+        if (elem.label.has_value()) {
+            size_t label_idx = identifier_constant(elem.label.value());
+            emit_short(static_cast<uint16_t>(label_idx), expr->line);
+        } else {
+            emit_short(static_cast<uint16_t>(0xFFFF), expr->line);  // No label marker
+        }
+    }
+}
+
+void Compiler::visit(TupleMemberExpr* expr) {
+    compile_expr(expr->tuple.get());
+
+    if (std::holds_alternative<size_t>(expr->member)) {
+        // Index access: tuple.0, tuple.1
+        size_t index = std::get<size_t>(expr->member);
+        emit_op(OpCode::OP_GET_TUPLE_INDEX, expr->line);
+        emit_short(static_cast<uint16_t>(index), expr->line);
+    } else {
+        // Label access: tuple.x, tuple.y
+        const std::string& label = std::get<std::string>(expr->member);
+        size_t label_idx = identifier_constant(label);
+        emit_op(OpCode::OP_GET_TUPLE_LABEL, expr->line);
+        emit_short(static_cast<uint16_t>(label_idx), expr->line);
+    }
+}
+
 void Compiler::visit(TernaryExpr* expr) {
     compile_expr(expr->condition.get());
 
@@ -3195,30 +3301,84 @@ result.reserve(program.size() + needed_specializations.size());
                     auto template_it = generic_struct_templates_.find(base_name);
                     if (template_it == generic_struct_templates_.end()) continue;
                     
-                    // Parse type arguments
+                    // Parse type arguments from mangled name
+                    // For nested generics like Container_Box_Int, we need to recognize
+                    // that Box_Int is a single type argument (Box<Int>)
                     std::vector<TypeAnnotation> type_args;
-                    size_t pos = 0;
-                    while (pos < remaining.length()) {
-                        size_t next_underscore = remaining.find('_', pos);
-                        std::string type_name;
-                        
-                        if (next_underscore == std::string::npos) {
-                            type_name = remaining.substr(pos);
-                            pos = remaining.length();
-                        } else {
-                            type_name = remaining.substr(pos, next_underscore - pos);
-                            pos = next_underscore + 1;
+                    size_t num_params = template_it->second->generic_params.size();
+
+                    // Helper function to parse type args considering nested generics
+                    std::function<TypeAnnotation(const std::string&)> parse_mangled_type;
+                    parse_mangled_type = [&](const std::string& mangled) -> TypeAnnotation {
+                        TypeAnnotation result;
+                        result.is_optional = false;
+                        result.is_function_type = false;
+
+                        // Check if this is a known generic template
+                        size_t first_underscore = mangled.find('_');
+                        if (first_underscore != std::string::npos) {
+                            std::string potential_template = mangled.substr(0, first_underscore);
+                            if (generic_struct_templates_.find(potential_template) != generic_struct_templates_.end()) {
+                                // This is a nested generic like Box_Int
+                                result.name = mangled; // Use the mangled name directly
+                                return result;
+                            }
                         }
-                        
-                        TypeAnnotation arg;
-                        arg.name = type_name;
-                        arg.is_optional = false;
-                        arg.is_function_type = false;
-                        type_args.push_back(arg);
+
+                        // Simple type
+                        result.name = mangled;
+                        return result;
+                    };
+
+                    // Helper function to consume one type argument from mangled string
+                    // Returns the consumed type and updates the remaining string
+                    std::function<TypeAnnotation(std::string&)> consume_one_type_arg;
+                    consume_one_type_arg = [&](std::string& str) -> TypeAnnotation {
+                        TypeAnnotation result;
+                        result.is_optional = false;
+                        result.is_function_type = false;
+
+                        // Check if str starts with a known generic template
+                        for (const auto& [template_name, template_decl] : generic_struct_templates_) {
+                            if (str.rfind(template_name + "_", 0) == 0) {
+                                // Found a nested generic like Box_...
+                                size_t nested_params = template_decl->generic_params.size();
+
+                                // We need to consume template_name + "_" + nested_params types
+                                std::string nested_mangled = template_name;
+                                str = str.substr(template_name.length() + 1); // skip "Box_"
+
+                                // Recursively consume nested type arguments
+                                for (size_t i = 0; i < nested_params; ++i) {
+                                    TypeAnnotation nested_arg = consume_one_type_arg(str);
+                                    nested_mangled += "_" + nested_arg.name;
+                                }
+
+                                result.name = nested_mangled;
+                                return result;
+                            }
+                        }
+
+                        // Simple type: consume until next underscore or end
+                        size_t next_underscore = str.find('_');
+                        if (next_underscore == std::string::npos) {
+                            result.name = str;
+                            str = "";
+                        } else {
+                            result.name = str.substr(0, next_underscore);
+                            str = str.substr(next_underscore + 1);
+                        }
+                        return result;
+                    };
+
+                    // Parse remaining string into type_args
+                    std::string remaining_copy = remaining;
+                    while (!remaining_copy.empty() && type_args.size() < num_params) {
+                        type_args.push_back(consume_one_type_arg(remaining_copy));
                     }
-                    
+
                     // Verify parameter count
-                    if (type_args.size() != template_it->second->generic_params.size()) {
+                    if (type_args.size() != num_params) {
                         continue;
                     }
                     

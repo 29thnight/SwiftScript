@@ -362,6 +362,9 @@ namespace swiftscript {
                 case OpCode::OP_POP:
                     pop();
                     break;
+                case OpCode::OP_DUP:
+                    push(peek(0));
+                    break;
                 case OpCode::OP_ADD: {
                     Value b = pop();
                     Value a = pop();
@@ -2281,6 +2284,69 @@ namespace swiftscript {
                     push(value);
                     break;
                 }
+                case OpCode::OP_TUPLE: {
+                    uint16_t count = read_short();
+                    auto* tuple = allocate_object<TupleObject>();
+                    tuple->elements.reserve(count);
+                    tuple->labels.reserve(count);
+
+                    // Pop elements in reverse order
+                    std::vector<Value> temp(count);
+                    for (int i = count - 1; i >= 0; --i) {
+                        temp[i] = pop();
+                    }
+                    for (const auto& v : temp) {
+                        tuple->elements.push_back(v);
+                    }
+
+                    // Read labels
+                    for (uint16_t i = 0; i < count; ++i) {
+                        uint16_t label_idx = read_short();
+                        if (label_idx == 0xFFFF) {
+                            tuple->labels.push_back(std::nullopt);
+                        } else {
+                            if (label_idx < chunk_->strings.size()) {
+                                tuple->labels.push_back(chunk_->strings[label_idx]);
+                            } else {
+                                tuple->labels.push_back(std::nullopt);
+                            }
+                        }
+                    }
+
+                    push(Value::from_object(tuple));
+                    break;
+                }
+                case OpCode::OP_GET_TUPLE_INDEX: {
+                    uint16_t index = read_short();
+                    Value tuple_val = pop();
+                    if (!tuple_val.is_object() || tuple_val.as_object()->type != ObjectType::Tuple) {
+                        throw std::runtime_error("Tuple index access on non-tuple.");
+                    }
+                    auto* tuple = static_cast<TupleObject*>(tuple_val.as_object());
+                    if (index >= tuple->elements.size()) {
+                        throw std::runtime_error("Tuple index out of bounds.");
+                    }
+                    push(tuple->elements[index]);
+                    break;
+                }
+                case OpCode::OP_GET_TUPLE_LABEL: {
+                    uint16_t label_idx = read_short();
+                    Value tuple_val = pop();
+                    if (!tuple_val.is_object() || tuple_val.as_object()->type != ObjectType::Tuple) {
+                        throw std::runtime_error("Tuple label access on non-tuple.");
+                    }
+                    auto* tuple = static_cast<TupleObject*>(tuple_val.as_object());
+                    if (label_idx >= chunk_->strings.size()) {
+                        throw std::runtime_error("Tuple label index out of range.");
+                    }
+                    const std::string& label = chunk_->strings[label_idx];
+                    Value result = tuple->get(label);
+                    if (result.is_null()) {
+                        throw std::runtime_error("Tuple has no element with label: " + label);
+                    }
+                    push(result);
+                    break;
+                }
                 case OpCode::OP_PRINT: {
                     Value val = pop();
                     std::cout << val.to_string() << '\n';
@@ -2791,15 +2857,15 @@ namespace swiftscript {
         // Enum case: access methods and properties (direction.describe())
         if (obj->type == ObjectType::EnumCase) {
             auto* enum_case = static_cast<EnumCaseObject*>(obj);
-            
+
             // Special property: rawValue
             if (name == "rawValue") {
                 return enum_case->raw_value;
             }
-            
+
             // Note: Computed properties are handled in OP_GET_PROPERTY directly
             // Here we only handle methods
-            
+
             // Look for methods in the enum type
             if (enum_case->enum_type) {
                 auto method_it = enum_case->enum_type->methods.find(name);
@@ -2810,6 +2876,16 @@ namespace swiftscript {
                 }
             }
             throw std::runtime_error("Enum case '" + enum_case->case_name + "' has no property or method named '" + name + "'");
+        }
+
+        // Tuple label access
+        if (obj->type == ObjectType::Tuple) {
+            auto* tuple = static_cast<TupleObject*>(obj);
+            Value result = tuple->get(name);
+            if (!result.is_null() || tuple->has_label(name)) {
+                return result;
+            }
+            throw std::runtime_error("Tuple has no element with label '" + name + "'");
         }
 
         throw std::runtime_error("Property access supported only on arrays, maps, and instances.");

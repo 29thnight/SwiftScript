@@ -131,7 +131,19 @@ StmtPtr clone_stmt(const Stmt* stmt) {
             }
             return copy;
         }
-        
+
+        case StmtKind::TupleDestructuring: {
+            const auto* td = static_cast<const TupleDestructuringStmt*>(stmt);
+            auto copy = std::make_unique<TupleDestructuringStmt>();
+            copy->line = td->line;
+            copy->bindings = td->bindings;
+            copy->is_let = td->is_let;
+            if (td->initializer) {
+                copy->initializer = clone_expr(td->initializer.get());
+            }
+            return copy;
+        }
+
         case StmtKind::Return: {
             const auto* ret = static_cast<const ReturnStmt*>(stmt);
             auto copy = std::make_unique<ReturnStmt>();
