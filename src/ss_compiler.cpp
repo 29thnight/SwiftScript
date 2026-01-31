@@ -9,6 +9,7 @@
 #include <sstream>
 #include <functional>
 #include <iostream>
+#include <filesystem>
 
 // Forward declarations for AST cloning
 namespace swiftscript {
@@ -28,6 +29,8 @@ auto specialized_program = specialize_generics(program);
     
 // Step 2: Type check - this handles generic specialization
 TypeChecker checker;
+checker.set_base_directory(base_directory_);
+checker.set_module_resolver(module_resolver_);
 checker.check(specialized_program);
 
 chunk_ = Chunk{};
@@ -1858,12 +1861,24 @@ void Compiler::visit(ImportStmt* stmt) {
         Parser parser(std::move(tokens));
         auto imported_program = parser.parse();
         
+        std::vector<std::string> module_exports;
+        std::unordered_set<std::string> seen_exports;
+        module_exports.reserve(imported_program.size());
+
         // Compile the imported module statements into current chunk
         for (const auto& imported_stmt : imported_program) {
             if (imported_stmt) {
+                if (imported_stmt->kind == StmtKind::FuncDecl) {
+                    const auto* func_decl = static_cast<const FuncDeclStmt*>(imported_stmt.get());
+                    if (seen_exports.insert(func_decl->name).second) {
+                        module_exports.push_back(func_decl->name);
+                    }
+                }
                 compile_stmt(imported_stmt.get());
             }
         }
+
+        emit_module_namespace(module_key, module_exports, stmt->line);
         
         // Remove from compiling set
         compiling_modules_.erase(module_key);
@@ -2918,6 +2933,36 @@ void Compiler::emit_variable_get(const std::string& name, uint32_t line) {
     }
     emit_op(OpCode::OP_GET_GLOBAL, line);
     emit_short(static_cast<uint16_t>(name_idx), line);
+}
+
+void Compiler::emit_module_namespace(const std::string& module_key,
+                                     const std::vector<std::string>& exports,
+                                     uint32_t line) {
+    std::filesystem::path module_path(module_key);
+    std::string module_name = module_path.stem().string();
+    if (module_name.empty()) {
+        module_name = module_key;
+    }
+
+    for (const auto& name : exports) {
+        emit_string(name, line);
+        emit_variable_get(name, line);
+    }
+
+    if (exports.size() > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many exports in module namespace", line);
+    }
+
+    emit_op(OpCode::OP_DICT, line);
+    emit_short(static_cast<uint16_t>(exports.size()), line);
+
+    size_t name_idx = identifier_constant(module_name);
+    if (name_idx > std::numeric_limits<uint16_t>::max()) {
+        throw CompilerError("Too many identifiers", line);
+    }
+    emit_op(OpCode::OP_SET_GLOBAL, line);
+    emit_short(static_cast<uint16_t>(name_idx), line);
+    emit_op(OpCode::OP_POP, line);
 }
 
 FunctionPrototype::ParamDefaultValue Compiler::build_param_default(const ParamDecl& param) {

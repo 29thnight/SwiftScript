@@ -1,6 +1,11 @@
 #include "ss_type_checker.hpp"
+#include "ss_compiler.hpp"
+#include "ss_lexer.hpp"
+#include "ss_parser.hpp"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 
 namespace swiftscript {
@@ -57,9 +62,18 @@ generic_param_stack_.clear();
 let_constants_.clear();
 current_type_context_.clear();
 errors_.clear();
+module_cache_.clear();
+imported_modules_.clear();
+compiling_modules_.clear();
+imported_module_names_.clear();
 
     add_builtin_types();
+    std::vector<const std::vector<StmtPtr>*> imported_programs;
+    collect_imported_programs(program, imported_programs);
     collect_type_declarations(program);
+    for (const auto* module_program : imported_programs) {
+        collect_type_declarations(*module_program);
+    }
     finalize_protocol_maps();
 
     enter_scope();
@@ -68,21 +82,20 @@ errors_.clear();
             declare_symbol(name, TypeInfo{name, false, kind, {}, nullptr}, 0);
         }
     }
-    for (const auto& stmt : program) {
-        if (stmt && stmt->kind == StmtKind::FuncDecl) {
-            const auto* func = static_cast<const FuncDeclStmt*>(stmt.get());
-            enter_generic_params(func->generic_params);
-            std::vector<TypeInfo> params;
-            params.reserve(func->params.size());
-            for (const auto& param : func->params) {
-                params.push_back(type_from_annotation(param.type, func->line));
+    for (const auto& module_name : imported_module_names_) {
+        declare_symbol(module_name, TypeInfo::unknown(), 0);
+    }
+    for (const auto* module_program : imported_programs) {
+        declare_functions(*module_program);
+    }
+    declare_functions(program);
+    for (const auto* module_program : imported_programs) {
+        for (const auto& stmt : *module_program) {
+            if (!stmt) {
+                error("Null statement in program", 0);
+                continue;
             }
-            TypeInfo return_type = TypeInfo::builtin("Void");
-            if (func->return_type.has_value()) {
-                return_type = type_from_annotation(func->return_type.value(), func->line);
-            }
-            declare_symbol(func->name, TypeInfo::function(params, return_type), func->line);
-            exit_generic_params();
+            check_stmt(stmt.get());
         }
     }
     for (const auto& stmt : program) {
@@ -381,6 +394,114 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                 break;
         }
     }
+}
+
+void TypeChecker::collect_imported_programs(const std::vector<StmtPtr>& program,
+                                            std::vector<const std::vector<StmtPtr>*>& ordered_programs) {
+    for (const auto& stmt_ptr : program) {
+        if (!stmt_ptr || stmt_ptr->kind != StmtKind::Import) {
+            continue;
+        }
+        const auto* stmt = static_cast<const ImportStmt*>(stmt_ptr.get());
+        const std::string& module_key = stmt->module_path;
+        if (imported_modules_.contains(module_key)) {
+            continue;
+        }
+        imported_modules_.insert(module_key);
+        std::string module_name = module_symbol_name(module_key);
+        if (!module_name.empty()) {
+            imported_module_names_.push_back(module_name);
+        }
+        const auto& module_program = load_module_program(module_key, stmt->line);
+        collect_imported_programs(module_program, ordered_programs);
+        ordered_programs.push_back(&module_program);
+    }
+}
+
+const std::vector<StmtPtr>& TypeChecker::load_module_program(const std::string& module_key, uint32_t line) {
+    auto cached = module_cache_.find(module_key);
+    if (cached != module_cache_.end()) {
+        return cached->second;
+    }
+
+    if (compiling_modules_.contains(module_key)) {
+        error("Circular import detected: " + module_key, line);
+        auto [it, _] = module_cache_.emplace(module_key, std::vector<StmtPtr>{});
+        return it->second;
+    }
+    compiling_modules_.insert(module_key);
+
+    std::string source;
+    if (module_resolver_) {
+        std::string full_path;
+        std::string err;
+        if (!module_resolver_->ResolveAndLoad(module_key, full_path, source, err)) {
+            error("Cannot resolve import '" + module_key + "': " + err, line);
+            compiling_modules_.erase(module_key);
+            auto [it, _] = module_cache_.emplace(module_key, std::vector<StmtPtr>{});
+            return it->second;
+        }
+    } else {
+        std::filesystem::path full_path = module_key;
+        if (!base_directory_.empty() && !full_path.is_absolute()) {
+            full_path = std::filesystem::path(base_directory_) / full_path;
+        }
+        if (full_path.extension() != ".ss") {
+            full_path += ".ss";
+        }
+        std::ifstream file(full_path, std::ios::binary);
+        if (!file.is_open()) {
+            error("Cannot open import file: " + full_path.string(), line);
+            compiling_modules_.erase(module_key);
+            auto [it, _] = module_cache_.emplace(module_key, std::vector<StmtPtr>{});
+            return it->second;
+        }
+        source.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    }
+
+    try {
+        Lexer lexer(source);
+        auto tokens = lexer.tokenize_all();
+        Parser parser(std::move(tokens));
+        auto parsed_program = parser.parse();
+        auto [it, _] = module_cache_.emplace(module_key, std::move(parsed_program));
+        compiling_modules_.erase(module_key);
+        return it->second;
+    } catch (const std::exception& e) {
+        error("Error importing module '" + module_key + "': " + e.what(), line);
+        compiling_modules_.erase(module_key);
+        auto [it, _] = module_cache_.emplace(module_key, std::vector<StmtPtr>{});
+        return it->second;
+    }
+}
+
+void TypeChecker::declare_functions(const std::vector<StmtPtr>& program) {
+    for (const auto& stmt : program) {
+        if (stmt && stmt->kind == StmtKind::FuncDecl) {
+            const auto* func = static_cast<const FuncDeclStmt*>(stmt.get());
+            enter_generic_params(func->generic_params);
+            std::vector<TypeInfo> params;
+            params.reserve(func->params.size());
+            for (const auto& param : func->params) {
+                params.push_back(type_from_annotation(param.type, func->line));
+            }
+            TypeInfo return_type = TypeInfo::builtin("Void");
+            if (func->return_type.has_value()) {
+                return_type = type_from_annotation(func->return_type.value(), func->line);
+            }
+            declare_symbol(func->name, TypeInfo::function(params, return_type), func->line);
+            exit_generic_params();
+        }
+    }
+}
+
+std::string TypeChecker::module_symbol_name(const std::string& module_key) {
+    std::filesystem::path module_path(module_key);
+    std::string stem = module_path.stem().string();
+    if (!stem.empty()) {
+        return stem;
+    }
+    return module_key;
 }
 
 void TypeChecker::finalize_protocol_maps() {
