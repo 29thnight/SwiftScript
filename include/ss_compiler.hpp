@@ -134,6 +134,9 @@ private:
     void record_entry_main_global(const FuncDeclStmt* stmt);
     void record_entry_main_static(const std::string& type_name, int line);
     void emit_auto_entry_main_call();
+    void emit_module_namespace(const std::string& module_key,
+                               const std::vector<std::string>& exports,
+                               uint32_t line);
 
     void visit(LiteralExpr* expr);
     void visit(IdentifierExpr* expr);

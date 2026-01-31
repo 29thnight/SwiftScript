@@ -9,6 +9,8 @@
 
 namespace swiftscript {
 
+struct IModuleResolver;
+
 class TypeCheckError : public std::runtime_error {
 public:
     TypeCheckError(const std::string& msg, uint32_t line = 0)
@@ -24,6 +26,8 @@ private:
 class TypeChecker {
 public:
     void check(const std::vector<StmtPtr>& program);
+    void set_base_directory(const std::string& dir) { base_directory_ = dir; }
+    void set_module_resolver(IModuleResolver* resolver) { module_resolver_ = resolver; }
 
 private:
     enum class TypeKind {
@@ -82,11 +86,22 @@ private:
     std::unordered_set<std::string> let_constants_;  // Track let constants
     std::string current_type_context_;  // Track which type we're currently inside (for access control)
     mutable std::vector<TypeCheckError> errors_;
+    std::string base_directory_;
+    IModuleResolver* module_resolver_{nullptr};
+    std::unordered_map<std::string, std::vector<StmtPtr>> module_cache_;
+    std::unordered_set<std::string> imported_modules_;
+    std::unordered_set<std::string> compiling_modules_;
+    std::vector<std::string> imported_module_names_;
     
     // Generic templates storage
     std::unordered_map<std::string, const StructDeclStmt*> generic_struct_templates_;
 
     void collect_type_declarations(const std::vector<StmtPtr>& program);
+    void collect_imported_programs(const std::vector<StmtPtr>& program,
+                                   std::vector<const std::vector<StmtPtr>*>& ordered_programs);
+    const std::vector<StmtPtr>& load_module_program(const std::string& module_key, uint32_t line);
+    void declare_functions(const std::vector<StmtPtr>& program);
+    static std::string module_symbol_name(const std::string& module_key);
     void add_builtin_types();
     void add_known_type(const std::string& name, TypeKind kind, uint32_t line);
     void add_protocol_inheritance(const std::string& protocol, const std::vector<std::string>& parents);
