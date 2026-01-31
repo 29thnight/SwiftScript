@@ -1,12 +1,8 @@
+#include "pch.h"
 #include "ss_type_checker.hpp"
 #include "ss_compiler.hpp"
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
-
-#include <algorithm>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 
 namespace swiftscript {
 

@@ -30,92 +30,23 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\ss_core.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_token.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_value.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_vm.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_ast.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_lexer.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_parser.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_chunk.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_compiler.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_type_checker.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
     <ClInclude Include="test\test_helpers.hpp">
       <Filter>Test\internal\include</Filter>
     </ClInclude>
     <ClInclude Include="test\QUICK_REFERENCE.hpp">
       <Filter>Test\docs</Filter>
     </ClInclude>
-    <ClInclude Include="test\EXAMPLES_test_helpers.hpp">
-      <Filter>Test\internal\include</Filter>
-    </ClInclude>
     <ClInclude Include="test\test_all_tests.hpp">
       <Filter>Test\internal\include</Filter>
     </ClInclude>
     <ClInclude Include="test\test_property_observers_impl.hpp">
-      <Filter>헤더 파일</Filter>
+      <Filter>Test\internal\include</Filter>
     </ClInclude>
-    <ClInclude Include="include\ss_project_resolver.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_project.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_runner.hpp">
+    <ClInclude Include="pch_.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\ss_core.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_token.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_value.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_vm.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_lexer.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_parser.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_compiler.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_chunk.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_type_checker.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="test\test_basic.cpp">
-      <Filter>Test\internal\src</Filter>
-    </ClCompile>
     <ClCompile Include="test\test_class.cpp">
       <Filter>Test\internal\src</Filter>
     </ClCompile>
@@ -131,19 +62,7 @@
     <ClCompile Include="test\test_new_features.cpp">
       <Filter>Test\internal\src</Filter>
     </ClCompile>
-    <ClCompile Include="test\test_new_features_simple.cpp">
-      <Filter>Test\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="test\test_object.cpp">
-      <Filter>Test\internal\src</Filter>
-    </ClCompile>
     <ClCompile Include="test\test_optional.cpp">
-      <Filter>Test\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="test\test_simple.cpp">
-      <Filter>Test\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="test\test_struct.cpp">
       <Filter>Test\internal\src</Filter>
     </ClCompile>
     <ClCompile Include="test\test_switch.cpp">
@@ -161,32 +80,23 @@
     <ClCompile Include="test\test_extension.cpp">
       <Filter>Test\internal\src</Filter>
     </ClCompile>
-    <ClCompile Include="test\test_minimal.cpp">
-      <Filter>Test\internal\src</Filter>
-    </ClCompile>
     <ClCompile Include="test\test_phase1.cpp">
       <Filter>Test\internal\src</Filter>
     </ClCompile>
-    <ClCompile Include="test\test_let.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="test\test_access_control.cpp">
-      <Filter>소스 파일</Filter>
+      <Filter>Test\internal\src</Filter>
+    </ClCompile>
+    <ClCompile Include="test\test_let.cpp">
+      <Filter>Test\internal\src</Filter>
     </ClCompile>
     <ClCompile Include="test\test_pattern_matching.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_ast_clone.cpp">
-      <Filter>소스 파일</Filter>
+      <Filter>Test\internal\src</Filter>
     </ClCompile>
     <ClCompile Include="test\test_tuple.cpp">
-      <Filter>소스 파일</Filter>
+      <Filter>Test\internal\src</Filter>
     </ClCompile>
-    <ClCompile Include="src\ss_project_resolver.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_project.cpp">
-      <Filter>소스 파일</Filter>
+    <ClCompile Include="pch_.cpp">
+      <Filter>헤더 파일</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -221,25 +131,10 @@
     <None Include="test\CHECKLIST.md">
       <Filter>Test\docs</Filter>
     </None>
-    <None Include="test_extension_simple.ss" />
-    <None Include="test_ext1.ss" />
-    <None Include="test_computed_ext.ss" />
-    <None Include="test_struct_prop_assign.ss" />
-    <None Include="test_rawvalue.swift" />
-    <None Include="test_mutating.swift" />
     <None Include="GRAMMAR_TODO.md">
       <Filter>Test\docs</Filter>
     </None>
-    <None Include="test_private.swift" />
-    <None Include="test_observers.swift" />
     <None Include="IMPLEMENTATION_STATUS.md" />
-    <None Include="test_generic_workaround.swift" />
-    <None Include="test_generic_simple.swift" />
-    <None Include="test_builtin_protocol.swift" />
-    <None Include="test_gen_simple.swift" />
-    <None Include="TestProject\Libs\MathLib.ss" />
-    <None Include="TestProject\Scripts\main.ss" />
-    <None Include="TestProject\project.ssproject" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="test\CMakeLists.txt" />

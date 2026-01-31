@@ -1,15 +1,16 @@
+#include "pch.h"
 #include "ss_ast.hpp"
 
 namespace swiftscript {
 
-// ============================================================================
-// Expression Cloning
-// ============================================================================
+    // ============================================================================
+    // Expression Cloning
+    // ============================================================================
 
-ExprPtr clone_expr(const Expr* expr) {
-    if (!expr) return nullptr;
-    
-    switch (expr->kind) {
+    ExprPtr clone_expr(const Expr* expr) {
+        if (!expr) return nullptr;
+
+        switch (expr->kind) {
         case ExprKind::Literal: {
             const auto* lit = static_cast<const LiteralExpr*>(expr);
             auto copy = std::make_unique<LiteralExpr>();
@@ -18,7 +19,7 @@ ExprPtr clone_expr(const Expr* expr) {
             copy->string_value = lit->string_value;
             return copy;
         }
-        
+
         case ExprKind::Identifier: {
             const auto* id = static_cast<const IdentifierExpr*>(expr);
             auto copy = std::make_unique<IdentifierExpr>(id->name);
@@ -26,7 +27,7 @@ ExprPtr clone_expr(const Expr* expr) {
             copy->generic_args = id->generic_args;
             return copy;
         }
-        
+
         case ExprKind::Unary: {
             const auto* unary = static_cast<const UnaryExpr*>(expr);
             auto copy = std::make_unique<UnaryExpr>();
@@ -35,7 +36,7 @@ ExprPtr clone_expr(const Expr* expr) {
             if (unary->operand) copy->operand = clone_expr(unary->operand.get());
             return copy;
         }
-        
+
         case ExprKind::Binary: {
             const auto* binary = static_cast<const BinaryExpr*>(expr);
             auto copy = std::make_unique<BinaryExpr>();
@@ -45,7 +46,7 @@ ExprPtr clone_expr(const Expr* expr) {
             if (binary->right) copy->right = clone_expr(binary->right.get());
             return copy;
         }
-        
+
         case ExprKind::Call: {
             const auto* call = static_cast<const CallExpr*>(expr);
             auto copy = std::make_unique<CallExpr>();
@@ -57,7 +58,7 @@ ExprPtr clone_expr(const Expr* expr) {
             copy->argument_names = call->argument_names;
             return copy;
         }
-        
+
         case ExprKind::Member: {
             const auto* member = static_cast<const MemberExpr*>(expr);
             auto copy = std::make_unique<MemberExpr>();
@@ -66,36 +67,36 @@ ExprPtr clone_expr(const Expr* expr) {
             copy->member = member->member;
             return copy;
         }
-        
-        // Add more cases as needed
+
+                             // Add more cases as needed
         default:
             // For unsupported expression types, return null
             // This will cause compilation to fail, which is better than silent bugs
             return nullptr;
-    }
-}
-
-// ============================================================================
-// Statement Cloning
-// ============================================================================
-
-StmtPtr clone_stmt(const Stmt* stmt);
-
-StmtPtr clone_block_stmt(const BlockStmt* block) {
-    auto copy = std::make_unique<BlockStmt>();
-    copy->line = block->line;
-    for (const auto& stmt : block->statements) {
-        if (stmt) {
-            copy->statements.push_back(clone_stmt(stmt.get()));
         }
     }
-    return copy;
-}
 
-StmtPtr clone_stmt(const Stmt* stmt) {
-    if (!stmt) return nullptr;
-    
-    switch (stmt->kind) {
+    // ============================================================================
+    // Statement Cloning
+    // ============================================================================
+
+    StmtPtr clone_stmt(const Stmt* stmt);
+
+    StmtPtr clone_block_stmt(const BlockStmt* block) {
+        auto copy = std::make_unique<BlockStmt>();
+        copy->line = block->line;
+        for (const auto& stmt : block->statements) {
+            if (stmt) {
+                copy->statements.push_back(clone_stmt(stmt.get()));
+            }
+        }
+        return copy;
+    }
+
+    StmtPtr clone_stmt(const Stmt* stmt) {
+        if (!stmt) return nullptr;
+
+        switch (stmt->kind) {
         case StmtKind::Expression: {
             const auto* expr_stmt = static_cast<const ExprStmt*>(stmt);
             auto copy = std::make_unique<ExprStmt>();
@@ -105,7 +106,7 @@ StmtPtr clone_stmt(const Stmt* stmt) {
             }
             return copy;
         }
-        
+
         case StmtKind::Print: {
             const auto* print = static_cast<const PrintStmt*>(stmt);
             auto copy = std::make_unique<PrintStmt>();
@@ -115,7 +116,7 @@ StmtPtr clone_stmt(const Stmt* stmt) {
             }
             return copy;
         }
-        
+
         case StmtKind::VarDecl: {
             const auto* var = static_cast<const VarDeclStmt*>(stmt);
             auto copy = std::make_unique<VarDeclStmt>();
@@ -153,7 +154,7 @@ StmtPtr clone_stmt(const Stmt* stmt) {
             }
             return copy;
         }
-        
+
         case StmtKind::If: {
             const auto* if_stmt = static_cast<const IfStmt*>(stmt);
             auto copy = std::make_unique<IfStmt>();
@@ -169,16 +170,16 @@ StmtPtr clone_stmt(const Stmt* stmt) {
             }
             return copy;
         }
-        
+
         case StmtKind::Block: {
             return clone_block_stmt(static_cast<const BlockStmt*>(stmt));
         }
-        
-        // Add more cases as needed
+
+                            // Add more cases as needed
         default:
             // For unsupported statement types, return null
             return nullptr;
+        }
     }
-}
 
-} // namespace swiftscript
+}

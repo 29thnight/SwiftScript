@@ -1,5 +1,5 @@
+#include "pch.h"
 #include "ss_project_resolver.hpp"
-#include <fstream>
 
 namespace swiftscript {
 

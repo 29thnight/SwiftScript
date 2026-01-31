@@ -1,0 +1,21 @@
+#pragma once
+#include <string>
+#include <functional>
+
+class JsonRpcConnection {
+public:
+    /*using OnMessageFn = std::function<void(const std::string& json)>;*/
+    using OnMessageFn = std::function<void(const std::string& json, JsonRpcConnection& self)>;
+
+    explicit JsonRpcConnection(OnMessageFn onMessage) : onMessage_(std::move(onMessage)) {}
+
+    void Run();                      // blocking loop
+    void Send(const std::string& json); // send raw json (already serialized)
+
+private:
+    OnMessageFn onMessage_;
+
+    bool ReadMessage(std::string& outJson);
+    static bool ReadLine(std::string& outLine);
+    static bool ReadBytes(size_t n, std::string& out);
+};

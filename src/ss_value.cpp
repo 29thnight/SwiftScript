@@ -1,11 +1,7 @@
+#include "pch.h"
 #include "ss_value.hpp"
 #include "ss_vm.hpp"
 #include "ss_chunk.hpp"
-#include <sstream>
-#include <iomanip>
-#include <algorithm>
-#include <cmath>
-#include <limits>
 
 namespace swiftscript {
 
@@ -67,6 +63,14 @@ bool Value::equals(const Value& other) const {
             // Object equality is usually identity
             if (data_.object_val == other.data_.object_val) {
                 return true;
+            }
+
+            if (data_.object_val && other.data_.object_val &&
+                data_.object_val->type == ObjectType::String &&
+                other.data_.object_val->type == ObjectType::String) {
+                auto* str_a = static_cast<StringObject*>(data_.object_val);
+                auto* str_b = static_cast<StringObject*>(other.data_.object_val);
+                return str_a->data == str_b->data;
             }
             
             // Special case: EnumCaseObject comparison by value

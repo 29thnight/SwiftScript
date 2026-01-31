@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "ss_core.hpp"
 #include "ss_value.hpp"
 #include "ss_vm.hpp"
@@ -220,3 +221,4 @@ void RC::process_deferred_releases(VM* vm) {
 }
 
 } // namespace swiftscript
+

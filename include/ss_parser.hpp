@@ -2,9 +2,6 @@
 
 #include "ss_token.hpp"
 #include "ss_ast.hpp"
-#include <vector>
-#include <string>
-#include <stdexcept>
 
 namespace swiftscript {
 
@@ -24,6 +21,8 @@ namespace swiftscript {
     private:
         std::vector<Token> tokens_;
         size_t current_{ 0 };
+
+        void skip_comments();
 
         // ---- Statement parsers ----
         StmtPtr declaration();

@@ -3,11 +3,6 @@
 #include "ss_token.hpp"
 #include "ss_value.hpp"
 #include <memory>
-#include <vector>
-#include <string>
-#include <optional>
-#include <utility>
-#include <variant>
 
 namespace swiftscript {
 
@@ -40,6 +35,7 @@ struct TypeAnnotation {
     std::vector<TupleTypeElement> tuple_elements;  // For tuple types
 };
 
+
 // ---- Forward declarations ----
 struct Expr;
 struct Stmt;
@@ -48,6 +44,7 @@ struct ClassDeclStmt;
 struct StructDeclStmt;
 struct StructMethodDecl;
 struct EnumDeclStmt;
+struct Attribute;
 
 using ExprPtr = std::unique_ptr<Expr>;
 using StmtPtr = std::unique_ptr<Stmt>;
@@ -343,6 +340,7 @@ enum class StmtKind {
     EnumDecl,    // Enum declaration
     ProtocolDecl, // Protocol declaration
     ExtensionDecl, // Extension declaration
+    AttributeDecl, // Attribute declaration
     If,
     IfLet,
     GuardLet,
@@ -401,7 +399,7 @@ struct VarDeclStmt : Stmt {
     // Property observers
     std::unique_ptr<BlockStmt> will_set_body;
     std::unique_ptr<BlockStmt> did_set_body;
-    
+
     VarDeclStmt() : Stmt(StmtKind::VarDecl) {}
 };
 
@@ -621,7 +619,6 @@ struct EnumDeclStmt : Stmt {
     std::optional<TypeAnnotation> raw_type;  // Type of raw values (if any)
     std::vector<std::unique_ptr<StructMethodDecl>> methods;  // Methods and computed properties
     AccessLevel access_level{AccessLevel::Internal};  // Default is internal
-
 
     EnumDeclStmt() : Stmt(StmtKind::EnumDecl) {}
 };

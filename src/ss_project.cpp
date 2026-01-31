@@ -1,5 +1,5 @@
+#include "pch.h"
 #include "ss_project.hpp"
-#include <fstream>
 
 namespace swiftscript {
 

@@ -1,13 +1,6 @@
 #pragma once
 
 #include "ss_core.hpp"
-#include <variant>
-#include <optional>
-#include <string_view>
-#include <string>
-#include <unordered_map>
-#include <vector>
-#include <memory>
 
 namespace swiftscript {
 

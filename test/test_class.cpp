@@ -1,12 +1,10 @@
-﻿#include "ss_compiler.hpp"
+﻿#include "pch_.h"
+#include "ss_compiler.hpp"
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
 #include "ss_vm.hpp"
 #include "test_helpers.hpp"
-#include <cassert>
-#include <iostream>
-#include <sstream>
-#include <string>
+
 
 using namespace swiftscript;
 using namespace swiftscript::test;
@@ -59,7 +57,7 @@ void test_simple_class_method() {
 void test_initializer_called() {
     std::string source = R"(
         class Counter {
-            func init() {
+            init {
                 print("init called")
             }
             func value() -> Int {
@@ -192,12 +190,12 @@ void test_override_without_base_method() {
 void test_override_init_allowed() {
     std::string source = R"(
         class Base {
-            func init() {
+            init {
                 print("base")
             }
         }
         class Derived: Base {
-            func init() {
+            init {
                 print("derived")
             }
         }

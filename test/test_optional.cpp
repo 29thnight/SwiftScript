@@ -1,7 +1,6 @@
+#include "pch_.h"
 #include "ss_vm.hpp"
 #include "ss_value.hpp"
-#include <cassert>
-#include <iostream>
 
 using namespace swiftscript;
 

@@ -1,5 +1,5 @@
+#include "pch.h"
 #include "ss_parser.hpp"
-#include <sstream>
 
 namespace swiftscript {
 
@@ -14,6 +14,8 @@ namespace swiftscript {
     std::vector<StmtPtr> Parser::parse() {
         std::vector<StmtPtr> statements;
         while (!is_at_end()) {
+            skip_comments();
+            if (is_at_end()) break;
             statements.push_back(declaration());
         }
         return statements;
@@ -47,6 +49,12 @@ namespace swiftscript {
             return true;
         }
         return false;
+    }
+
+    void Parser::skip_comments() {
+        while (!is_at_end() && peek().type == TokenType::Comment) {
+            advance();
+        }
     }
 
     const Token& Parser::consume(TokenType type, const std::string& message) {
@@ -304,6 +312,7 @@ namespace swiftscript {
     // ============================================================
 
     StmtPtr Parser::declaration() {
+        skip_comments();
         AccessLevel access_level = AccessLevel::Internal;
         bool has_access_modifier = false;
         if (match(TokenType::Public)) {
@@ -340,19 +349,34 @@ namespace swiftscript {
             return stmt;
         }
         if (check(TokenType::Class)) {
-            return class_declaration(access_level);
+            auto stmt = class_declaration(access_level);
+            if (auto* decl = dynamic_cast<ClassDeclStmt*>(stmt.get())) {
+            }
+            return stmt;
         }
         if (check(TokenType::Struct)) {
-            return struct_declaration(access_level);
+            auto stmt = struct_declaration(access_level);
+            if (auto* decl = dynamic_cast<StructDeclStmt*>(stmt.get())) {
+            }
+            return stmt;
         }
         if (check(TokenType::Enum)) {
-            return enum_declaration(access_level);
+            auto stmt = enum_declaration(access_level);
+            if (auto* decl = dynamic_cast<EnumDeclStmt*>(stmt.get())) {
+            }
+            return stmt;
         }
         if (check(TokenType::Protocol)) {
-            return protocol_declaration(access_level);
+            auto stmt = protocol_declaration(access_level);
+            if (auto* decl = dynamic_cast<ProtocolDeclStmt*>(stmt.get())) {
+            }
+            return stmt;
         }
         if (check(TokenType::Extension)) {
-            return extension_declaration(access_level);
+            auto stmt = extension_declaration(access_level);
+            if (auto* decl = dynamic_cast<ExtensionDeclStmt*>(stmt.get())) {
+            }
+            return stmt;
         }
         if (check(TokenType::Func)) {
             auto stmt = func_declaration();
@@ -672,6 +696,30 @@ namespace swiftscript {
                     error(previous(), "Class can only have one deinit.");
                 }
                 stmt->deinit_body = block();
+                continue;
+            }
+
+            if (check(TokenType::Init)) {
+                if (is_static) {
+                    error(previous(), "'static' cannot be used with 'init'.");
+                }
+                advance(); // consume 'init'
+
+                auto method = std::make_unique<FuncDeclStmt>();
+                method->line = previous().line;
+                method->name = "init";
+                method->is_override = is_override;
+                method->is_static = false;
+                method->access_level = access_level;
+
+
+                // Optional parameter list: allow both `init { ... }` and `init(...) { ... }`
+                if (match(TokenType::LeftParen)) {
+                    method->params = parse_param_list(true);
+                }
+
+                method->body = block();
+                stmt->methods.push_back(std::move(method));
                 continue;
             }
 
@@ -1540,6 +1588,8 @@ namespace swiftscript {
         blk->line = previous().line;
 
         while (!check(TokenType::RightBrace) && !is_at_end()) {
+            skip_comments();
+            if (check(TokenType::RightBrace) || is_at_end()) break;
             blk->statements.push_back(declaration());
         }
 

@@ -1,9 +1,5 @@
 #pragma once
 
-#include <string>
-#include <string_view>
-#include <cstdint>
-
 namespace swiftscript {
 
 // Token types
@@ -31,6 +27,7 @@ enum class TokenType {
     Enum,
     Protocol,
     Extension,
+    Attribute,   // attribute keyword for custom attributes
     Var,
     Let,
     Weak,        // weak keyword

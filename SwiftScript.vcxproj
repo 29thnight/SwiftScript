@@ -42,13 +42,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -105,8 +105,9 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>Default</LanguageStandard_C>
+      <PrecompiledHeaderFile>pch_.h</PrecompiledHeaderFile>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -122,8 +123,9 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>Default</LanguageStandard_C>
+      <PrecompiledHeaderFile>pch_.h</PrecompiledHeaderFile>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -131,43 +133,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="include\ss_ast.hpp" />
-    <ClInclude Include="include\ss_chunk.hpp" />
-    <ClInclude Include="include\ss_compiler.hpp" />
-    <ClInclude Include="include\ss_core.hpp" />
-    <ClInclude Include="include\ss_lexer.hpp" />
-    <ClInclude Include="include\ss_parser.hpp" />
-    <ClInclude Include="include\ss_project.hpp" />
-    <ClInclude Include="include\ss_project_resolver.hpp" />
-    <ClInclude Include="include\ss_runner.hpp" />
-    <ClInclude Include="include\ss_token.hpp" />
-    <ClInclude Include="include\ss_type_checker.hpp" />
-    <ClInclude Include="include\ss_value.hpp" />
-    <ClInclude Include="include\ss_vm.hpp" />
-    <ClInclude Include="test\EXAMPLES_test_helpers.hpp" />
+    <ClInclude Include="pch_.h" />
     <ClInclude Include="test\QUICK_REFERENCE.hpp" />
     <ClInclude Include="test\test_all_tests.hpp" />
     <ClInclude Include="test\test_helpers.hpp" />
     <ClInclude Include="test\test_property_observers_impl.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\ss_ast_clone.cpp" />
-    <ClCompile Include="src\ss_chunk.cpp" />
-    <ClCompile Include="src\ss_core.cpp" />
-    <ClCompile Include="src\ss_compiler.cpp" />
-    <ClCompile Include="src\ss_lexer.cpp" />
-    <ClCompile Include="src\ss_parser.cpp" />
-    <ClCompile Include="src\ss_project.cpp" />
-    <ClCompile Include="src\ss_project_resolver.cpp" />
-    <ClCompile Include="src\ss_type_checker.cpp" />
-    <ClCompile Include="src\ss_token.cpp" />
-    <ClCompile Include="src\ss_value.cpp" />
-    <ClCompile Include="src\ss_vm.cpp" />
+    <ClCompile Include="pch_.cpp" />
     <ClCompile Include="test\test_access_control.cpp" />
-    <ClCompile Include="test\test_basic.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="test\test_class.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
@@ -188,16 +162,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="test\test_let.cpp" />
-    <ClCompile Include="test\test_minimal.cpp" />
     <ClCompile Include="test\test_new_features.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="test\test_new_features_simple.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="test\test_object.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
@@ -205,11 +170,6 @@
     <ClCompile Include="test\test_pattern_matching.cpp" />
     <ClCompile Include="test\test_phase1.cpp" />
     <ClCompile Include="test\test_protocol.cpp" />
-    <ClCompile Include="test\test_simple.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="test\test_struct.cpp" />
     <ClCompile Include="test\test_tuple.cpp" />
     <ClCompile Include="test\test_switch.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
@@ -221,9 +181,6 @@
     <None Include="docs\protocol-implementation.md" />
     <None Include="GRAMMAR_TODO.md" />
     <None Include="IMPLEMENTATION_STATUS.md" />
-    <None Include="TestProject\Libs\MathLib.ss" />
-    <None Include="TestProject\project.ssproject" />
-    <None Include="TestProject\Scripts\main.ss" />
     <None Include="test\build.bat" />
     <None Include="test\build.sh" />
     <None Include="test\CHECKLIST.md" />
@@ -233,22 +190,15 @@
     <None Include="test\README_TESTS.md" />
     <None Include="test\SUMMARY.md" />
     <None Include="test\TEST_FRAMEWORK_README.md" />
-    <None Include="test_builtin_protocol.swift" />
-    <None Include="test_computed_ext.ss" />
-    <None Include="test_ext1.ss" />
-    <None Include="test_extension_simple.ss" />
-    <None Include="test_generic_simple.swift" />
-    <None Include="test_generic_workaround.swift" />
-    <None Include="test_gen_simple.swift" />
-    <None Include="test_mutating.swift" />
-    <None Include="test_observers.swift" />
-    <None Include="test_private.swift" />
-    <None Include="test_rawvalue.swift" />
-    <None Include="test_struct_prop_assign.ss" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="testlog.txt" />
     <Text Include="test\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="SwiftScriptLib.vcxproj">
+      <Project>{36348904-e027-4dd8-a112-9b969c34e0d0}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

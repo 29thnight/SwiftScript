@@ -3,16 +3,24 @@
 #include "ss_core.hpp"
 #include "ss_value.hpp"
 #include "ss_chunk.hpp"
-#include <vector>
-#include <unordered_map>
-#include <string>
-#include <optional>
 
 namespace swiftscript {
-
+    // Primary OpCodeHandler template. Specializations in
+    // `ss_vm_opcodes.inl` override `execute`. The primary implementation
+    // provides a default that throws for unhandled opcodes.
+    template<OpCode op>
+    struct OpCodeHandler {
+        static void execute(VM& vm) {
+            (void)vm;
+            throw std::runtime_error("Unhandled opcode (no handler specialization)");
+        }
+    };
     // Forward declarations
-    class Fiber;
     class CallFrame;
+    class ClosureObject;
+    class FunctionObject;
+    class UpvalueObject;
+    class InstanceObject;
 
     // VM Configuration
     struct VMConfig {
@@ -24,6 +32,10 @@ namespace swiftscript {
 
     // Virtual Machine
     class VM {
+        // Friend declaration for OpCode handlers
+        template<OpCode op>
+        friend struct OpCodeHandler;
+        
     private:
         VMConfig config_;
 
@@ -179,4 +191,13 @@ namespace swiftscript {
         return obj;
     }
 
+    // Opcode dispatch table (function pointer type) instantiated at program start
+    using OpHandlerFunc = void(*)(VM&);
+    extern const std::array<OpHandlerFunc, 256> g_opcode_handlers;
+
+    // Build the handler table at program startup
+    constexpr std::array<OpHandlerFunc, 256> make_handler_table();
+
 } // namespace swiftscript
+
+#include "ss_vm_opcodes.inl"

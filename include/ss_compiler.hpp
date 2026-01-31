@@ -2,10 +2,6 @@
 
 #include "ss_ast.hpp"
 #include "ss_chunk.hpp"
-#include <string>
-#include <vector>
-#include <stdexcept>
-#include <unordered_set>
 
 namespace swiftscript {
 

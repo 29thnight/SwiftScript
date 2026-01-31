@@ -1,11 +1,8 @@
-﻿#include "ss_compiler.hpp"
+﻿#include "pch_.h"
+#include "ss_compiler.hpp"
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
 #include "ss_vm.hpp"
-#include <cassert>
-#include <iostream>
-#include <sstream>
-#include <string>
 
 using namespace swiftscript;
 

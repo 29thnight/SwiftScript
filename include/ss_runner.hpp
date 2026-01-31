@@ -5,7 +5,6 @@
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
 #include "ss_compiler.hpp"
-#include <fstream>
 
 namespace swiftscript {
 

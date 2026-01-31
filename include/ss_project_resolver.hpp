@@ -1,9 +1,5 @@
 #pragma once
 #include "ss_compiler.hpp"
-#include <filesystem>
-#include <unordered_map>
-#include <vector>
-#include <string>
 
 namespace swiftscript {
 

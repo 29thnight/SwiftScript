@@ -1,10 +1,9 @@
+#include "pch_.h"
 #include "ss_compiler.hpp"
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
 #include "ss_vm.hpp"
 #include "test_helpers.hpp"
-#include <iostream>
-#include <sstream>
 
 using namespace swiftscript;
 using namespace swiftscript::test;

@@ -1,11 +1,10 @@
+#include "pch.h"
 #include "ss_token.hpp"
-#include <array>
-#include <unordered_map>
 
 namespace swiftscript {
 
 bool Token::is_keyword() const {
-    return type >= TokenType::Func && type <= TokenType::Mutating;
+    return type >= TokenType::Func && type <= TokenType::Do;
 }
 
 bool Token::is_operator() const {
@@ -28,7 +27,7 @@ std::string Token::to_string() const {
 
 const char* TokenUtils::token_type_name(TokenType type) {
     static constexpr std::array<std::string_view,
-        static_cast<size_t>(TokenType::RangeInclusive) + 1> kTokenTypeNames = {
+        static_cast<size_t>(TokenType::RangeExclusive) + 1> kTokenTypeNames = {
         "EOF",
         "ERROR",
         "COMMENT",
@@ -45,6 +44,7 @@ const char* TokenUtils::token_type_name(TokenType type) {
         "ENUM",
         "PROTOCOL",
         "EXTENSION",
+        "ATTRIBUTE",
         "VAR",
         "LET",
         "WEAK",
@@ -67,6 +67,7 @@ const char* TokenUtils::token_type_name(TokenType type) {
         "PUBLIC",
         "PRIVATE",
         "INTERNAL",
+        "FILEPRIVATE",
         "STATIC",
         "OVERRIDE",
         "INIT",
@@ -76,6 +77,17 @@ const char* TokenUtils::token_type_name(TokenType type) {
         "MUTATING",
         "GET",
         "SET",
+        "WILLSET",
+        "DIDSET",
+        "LAZY",
+        "AS",
+        "IS",
+        "WHERE",
+        "TRY",
+        "CATCH",
+        "THROW",
+        "THROWS",
+        "DO",
         "PLUS",
         "MINUS",
         "STAR",
@@ -86,6 +98,12 @@ const char* TokenUtils::token_type_name(TokenType type) {
         "MINUS_EQUAL",
         "STAR_EQUAL",
         "SLASH_EQUAL",
+        "PERCENT_EQUAL",
+        "AND_EQUAL",
+        "OR_EQUAL",
+        "XOR_EQUAL",
+        "LEFT_SHIFT_EQUAL",
+        "RIGHT_SHIFT_EQUAL",
         "EQUAL_EQUAL",
         "NOT_EQUAL",
         "LESS",
@@ -117,6 +135,7 @@ const char* TokenUtils::token_type_name(TokenType type) {
         "SEMICOLON",
         "RANGE",
         "RANGE_INCLUSIVE",
+        "RANGE_EXCLUSIVE",
     };
 
     const auto index = static_cast<size_t>(type);
@@ -134,6 +153,7 @@ TokenType TokenUtils::keyword_type(std::string_view str) {
         {"enum", TokenType::Enum},
         {"protocol", TokenType::Protocol},
         {"extension", TokenType::Extension},
+        {"attribute", TokenType::Attribute},
         {"var", TokenType::Var},
         {"let", TokenType::Let},
         {"weak", TokenType::Weak},
@@ -214,7 +234,7 @@ bool TokenUtils::is_comparison_operator(TokenType type) {
 }
 
 bool TokenUtils::is_binary_operator(TokenType type) {
-    return (type >= TokenType::Plus && type <= TokenType::RightShift) ||
+    return (type >= TokenType::Plus && type <= TokenType::NilCoalesce) ||
            type == TokenType::Question ||
            type == TokenType::NilCoalesce;
 }

@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "ss_lexer.hpp"
 
 namespace swiftscript {

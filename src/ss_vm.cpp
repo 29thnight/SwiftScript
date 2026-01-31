@@ -1,13 +1,15 @@
+#include "pch.h"
 #include "ss_vm.hpp"
 #include "ss_compiler.hpp"
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
-#include <iostream>
-#include <iomanip>
-#include <algorithm>
-#include <limits>
 
 namespace swiftscript {
+
+// Instantiate the opcode handler table from the constexpr factory in the
+// included `ss_vm_opcodes.inl`.
+const std::array<OpHandlerFunc, 256> g_opcode_handlers = make_handler_table();
+
 
     // Fast I/O initialization
     static struct FastIO {
@@ -37,6 +39,31 @@ namespace swiftscript {
         Object* obj = objects_head_;
         while (obj) {
             Object* next = obj->next;
+
+            // Call deinit for any remaining instances (even if refcount never hit zero)
+            if (obj->type == ObjectType::Instance) {
+                auto* inst = static_cast<InstanceObject*>(obj);
+                if (inst->klass) {
+                    Value deinit_method;
+                    ClassObject* current = inst->klass;
+                    while (current) {
+                        auto it = current->methods.find("deinit");
+                        if (it != current->methods.end()) {
+                            deinit_method = it->second;
+                            break;
+                        }
+                        current = current->superclass;
+                    }
+
+                    if (!deinit_method.is_null() && deinit_method.is_object()) {
+                        try {
+                            execute_deinit(inst, deinit_method);
+                        } catch (...) {
+                            // Swallow any errors during shutdown cleanup
+                        }
+                    }
+                }
+            }
 
             // Mark as dead and nil out weak references
             obj->rc.is_dead = true;
@@ -2531,6 +2558,38 @@ namespace swiftscript {
                     Value value = pop();
                     
                     bool result = false;
+                    if (type_name == "Int") {
+                        result = value.is_int();
+                    }
+                    else if (type_name == "Float") {
+                        result = value.is_float();
+                    }
+                    else if (type_name == "Bool") {
+                        result = value.is_bool();
+                    }
+                    else if (type_name == "String") {
+                        result = value.is_object() && value.as_object() &&
+                            value.as_object()->type == ObjectType::String;
+                    }
+                    else if (type_name == "Array") {
+                        result = value.is_object() && value.as_object() &&
+                            value.as_object()->type == ObjectType::List;
+                    }
+                    else if (type_name == "Dictionary") {
+                        result = value.is_object() && value.as_object() &&
+                            value.as_object()->type == ObjectType::Map;
+                    }
+                    else if (type_name == "Void") {
+                        result = value.is_null();
+                    }
+                    else if (type_name == "Any") {
+                        result = !value.is_null() && !value.is_undefined();
+                    }
+                    else {
+                        // Check for class, struct, or enum types
+                        result = false;
+					}
+
                     if (value.is_object() && value.as_object()) {
                         Object* obj = value.as_object();
                         

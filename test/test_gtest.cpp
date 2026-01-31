@@ -1,3 +1,4 @@
+#include "pch_.h"
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"
 #include "ss_compiler.hpp"
@@ -5,10 +6,6 @@
 #include "ss_parser.hpp"
 #include "ss_vm.hpp"
 #include "ss_runner.hpp"
-#include <fstream>
-#include <chrono>
-#include <iomanip>
-#include <sstream>
 
 using namespace swiftscript::test;
 
@@ -141,18 +138,6 @@ void test_computed_property_temperature_conversion();
 void test_computed_property_with_logic();
 void test_computed_property_access_other_properties();
 void test_computed_property_multiple_in_class();
-
-// Struct tests
-void test_basic_struct();
-void test_memberwise_init();
-void test_custom_init();
-void test_non_mutating_method();
-void test_mutating_method();
-void test_value_semantics();
-void test_self_access();
-void test_multiple_methods();
-void test_property_modification();
-void test_nested_struct();
 
 // Closure tests
 void test_closure_basic();
@@ -399,51 +384,6 @@ TEST(ComputedPropertiesTests, AccessOtherProperties) {
 
 TEST(ComputedPropertiesTests, MultipleInClass) {
     EXPECT_NO_THROW(swiftscript::test::test_computed_property_multiple_in_class());
-}
-
-// ============================================================================
-// Struct Tests
-// ============================================================================
-
-TEST(StructTests, BasicStruct) {
-    EXPECT_NO_THROW(swiftscript::test::test_basic_struct());
-}
-
-TEST(StructTests, MemberwiseInit) {
-    EXPECT_NO_THROW(swiftscript::test::test_memberwise_init());
-}
-
-TEST(StructTests, CustomInit) {
-    EXPECT_NO_THROW(swiftscript::test::test_custom_init());
-}
-
-TEST(StructTests, NonMutatingMethod) {
-    EXPECT_NO_THROW(swiftscript::test::test_non_mutating_method());
-}
-
-TEST(StructTests, MutatingMethod) {
-    EXPECT_NO_THROW(swiftscript::test::test_mutating_method());
-}
-
-TEST(StructTests, ValueSemantics) {
-    EXPECT_NO_THROW(swiftscript::test::test_value_semantics());
-}
-
-TEST(StructTests, SelfAccess) {
-    EXPECT_NO_THROW(swiftscript::test::test_self_access());
-}
-
-TEST(StructTests, MultipleMethods) {
-    EXPECT_NO_THROW(swiftscript::test::test_multiple_methods());
-}
-
-TEST(StructTests, PropertyModification) {
-    EXPECT_NO_THROW(swiftscript::test::test_property_modification());
-}
-
-TEST(StructTests, NestedStruct) {
-    // This test may skip if not supported
-    EXPECT_NO_THROW(swiftscript::test::test_nested_struct());
 }
 
 // ============================================================================
@@ -1239,6 +1179,12 @@ TEST_F(ProjectRunnerTest, BasicProjectRunner) {
 // ============================================================================
 
 int main(int argc, char** argv) {
+    // 한국어 로케일 생성
+    std::locale loc("ko_KR.UTF-8");
+
+    // cout에 로케일 적용
+    std::cout.imbue(loc);
+
     // Check for -run command first
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "-run") {

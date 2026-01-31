@@ -4,4 +4,6 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="SwiftScript.vcxproj" Id="30413cda-b530-43c7-8899-369989051a24" />
+  <Project Path="SwiftScriptLib.vcxproj" Id="36348904-e027-4dd8-a112-9b969c34e0d0" />
+  <Project Path="SwiftScriptServer.vcxproj" Id="3998f2ca-3c56-4fb1-ab0f-a7dec58b8bdd" />
 </Solution>

@@ -1,15 +1,8 @@
+#include "pch.h"
 #include "ss_compiler.hpp"
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
 #include "ss_type_checker.hpp"
-#include <limits>
-#include <memory>
-#include <stdexcept>
-#include <fstream>
-#include <sstream>
-#include <functional>
-#include <iostream>
-#include <filesystem>
 
 // Forward declarations for AST cloning
 namespace swiftscript {

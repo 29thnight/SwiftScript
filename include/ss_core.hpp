@@ -1,12 +1,5 @@
 #pragma once
 
-#include <atomic>
-#include <unordered_set>
-#include <string>
-#include <memory>
-#include <cstdint>
-#include <cassert>
-
 namespace swiftscript {
 
 // Forward declarations
