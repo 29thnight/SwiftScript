@@ -21,21 +21,21 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{30413cda-b530-43c7-8899-369989051a24}</ProjectGuid>
-    <RootNamespace>SwiftScript</RootNamespace>
+    <ProjectGuid>{078ebfae-3cfb-4932-b35d-6ecf60d14e4f}</ProjectGuid>
+    <RootNamespace>SwiftScriptCompiler</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -105,9 +105,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard_C>Default</LanguageStandard_C>
-      <PrecompiledHeaderFile>pch_.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -123,9 +121,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard_C>Default</LanguageStandard_C>
-      <PrecompiledHeaderFile>pch_.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -133,72 +129,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="pch_.h" />
-    <ClInclude Include="test\QUICK_REFERENCE.hpp" />
-    <ClInclude Include="test\test_all_tests.hpp" />
-    <ClInclude Include="test\test_helpers.hpp" />
-    <ClInclude Include="test\test_property_observers_impl.hpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="pch_.cpp" />
-    <ClCompile Include="test\test_access_control.cpp" />
-    <ClCompile Include="test\test_class.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="test\test_closure.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="test\test_enum.cpp" />
-    <ClCompile Include="test\test_extension.cpp" />
-    <ClCompile Include="test\test_gtest.cpp" />
-    <ClCompile Include="test\test_helpers_example.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="test\test_import.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="test\test_let.cpp" />
-    <ClCompile Include="test\test_new_features.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="test\test_optional.cpp" />
-    <ClCompile Include="test\test_pattern_matching.cpp" />
-    <ClCompile Include="test\test_phase1.cpp" />
-    <ClCompile Include="test\test_protocol.cpp" />
-    <ClCompile Include="test\test_tuple.cpp" />
-    <ClCompile Include="test\test_switch.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="docs\enum-implementation-status.md" />
-    <None Include="docs\protocol-implementation.md" />
-    <None Include="GRAMMAR_TODO.md" />
-    <None Include="IMPLEMENTATION_STATUS.md" />
-    <None Include="test\build.bat" />
-    <None Include="test\build.sh" />
-    <None Include="test\CHECKLIST.md" />
-    <None Include="test\DEBUGHELPER_SUMMARY_KR.md" />
-    <None Include="test\MIGRATION_GUIDE.md" />
-    <None Include="test\QUICKSTART.md" />
-    <None Include="test\README_TESTS.md" />
-    <None Include="test\SUMMARY.md" />
-    <None Include="test\TEST_FRAMEWORK_README.md" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="testlog.txt" />
-    <Text Include="test\CMakeLists.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="SwiftScriptLib.vcxproj">
-      <Project>{36348904-e027-4dd8-a112-9b969c34e0d0}</Project>
-    </ProjectReference>
+    <ClCompile Include="..\..\src\compiler\SwiftScriptCompiler.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

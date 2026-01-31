@@ -74,6 +74,9 @@ struct Protocol {
         void disassemble(const std::string& name) const;
         size_t disassemble_instruction(size_t offset) const;
 
+		void serialize(std::ostream& out) const;
+		static Chunk deserialize(std::istream& in);
+
     private:
         size_t simple_instruction(const char* name, size_t offset) const;
         size_t constant_instruction(const char* name, size_t offset) const;

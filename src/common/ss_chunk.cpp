@@ -297,4 +297,13 @@ size_t Chunk::property_instruction(const char* name, size_t offset) const {
     return offset + 4;
 }
 
+void Chunk::serialize(std::ostream& out) const
+{
+}
+
+Chunk Chunk::deserialize(std::istream& in)
+{
+    return Chunk();
+}
+
 } // namespace swiftscript

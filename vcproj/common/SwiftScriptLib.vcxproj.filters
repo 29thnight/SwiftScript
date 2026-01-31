@@ -18,111 +18,108 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
+    <ClInclude Include="..\..\src\common\framework.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="pch.h">
+    <ClInclude Include="..\..\src\common\pch.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_ast.hpp">
+    <ClInclude Include="..\..\src\common\ss_ast.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_chunk.hpp">
+    <ClInclude Include="..\..\src\common\ss_chunk.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_compiler.hpp">
+    <ClInclude Include="..\..\src\common\ss_compiler.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_core.hpp">
+    <ClInclude Include="..\..\src\common\ss_core.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_lexer.hpp">
+    <ClInclude Include="..\..\src\common\ss_lexer.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_parser.hpp">
+    <ClInclude Include="..\..\src\common\ss_opcodes.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_project.hpp">
+    <ClInclude Include="..\..\src\common\ss_parser.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_project_resolver.hpp">
+    <ClInclude Include="..\..\src\common\ss_project.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_runner.hpp">
+    <ClInclude Include="..\..\src\common\ss_project_resolver.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_token.hpp">
+    <ClInclude Include="..\..\src\common\ss_runner.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_type_checker.hpp">
+    <ClInclude Include="..\..\src\common\ss_token.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_value.hpp">
+    <ClInclude Include="..\..\src\common\ss_type_checker.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="..\SwiftScript\include\ss_vm.hpp">
+    <ClInclude Include="..\..\src\common\ss_value.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="include\ss_opcodes.hpp">
+    <ClInclude Include="..\..\src\common\ss_vm.hpp">
       <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_vm_opcodes.inl">
-      <Filter>vm_opcodes</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ss_vm_opcodes_arithmetic.inl">
-      <Filter>vm_opcodes</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="SwiftScriptLib.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="pch.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_vm.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_chunk.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_compiler.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_core.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_lexer.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_parser.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_project.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_project_resolver.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_token.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_type_checker.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="..\SwiftScript\src\ss_value.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ss_ast_clone.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
+    <None Include="..\..\src\common\ss_opcodes.def">
+      <Filter>vm_opcodes</Filter>
+    </None>
+    <None Include="..\..\src\common\ss_vm_opcodes.inl">
+      <Filter>vm_opcodes</Filter>
+    </None>
+    <None Include="..\..\src\common\ss_vm_opcodes_arithmetic.inl">
+      <Filter>vm_opcodes</Filter>
+    </None>
+    <None Include="..\..\src\common\ss_vm_opcodes_basic.inl">
+      <Filter>vm_opcodes</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="include\ss_vm_opcodes_basic.inl">
-      <Filter>vm_opcodes</Filter>
-    </None>
-    <None Include="include\ss_opcodes.def">
-      <Filter>vm_opcodes</Filter>
-    </None>
+    <ClCompile Include="..\..\src\common\ss_core.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_lexer.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_parser.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_project.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_project_resolver.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_token.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_type_checker.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_value.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_vm.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\pch.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_ast_clone.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_chunk.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\ss_compiler.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
