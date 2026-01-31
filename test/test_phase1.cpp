@@ -1307,7 +1307,7 @@ void test_generic_struct_box() {
 
     std::string result = run_code(source);
     if (result.find("ERROR") != std::string::npos) {
-        std::cout << "[SKIP] test_generic_struct_box - Generic runtime specialization not yet implemented\n";
+        std::cout << "[SKIP] test_generic_struct_box - Error: " << result << "\n";
         return;
     }
     AssertHelper::assert_no_error(result);
@@ -1472,7 +1472,7 @@ void test_nested_generic_box() {
 
     std::string result = run_code(source);
     if (result.find("ERROR") != std::string::npos) {
-        std::cout << "[SKIP] test_nested_generic_box - Nested generics Box<Box<Int>>\n";
+        std::cout << "[SKIP] test_nested_generic_box - Error: " << result << "\n";
         return;
     }
     AssertHelper::assert_no_error(result);

@@ -167,6 +167,9 @@
     <ClCompile Include="test\test_pattern_matching.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="src\ss_ast_clone.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="test\build.sh" />
@@ -215,6 +218,7 @@
     <None Include="test_generic_workaround.swift" />
     <None Include="test_generic_simple.swift" />
     <None Include="test_builtin_protocol.swift" />
+    <None Include="test_gen_simple.swift" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="test\CMakeLists.txt" />

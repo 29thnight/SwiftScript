@@ -148,6 +148,7 @@
     <ClInclude Include="test\test_property_observers_impl.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\ss_ast_clone.cpp" />
     <ClCompile Include="src\ss_chunk.cpp" />
     <ClCompile Include="src\ss_core.cpp" />
     <ClCompile Include="src\ss_compiler.cpp" />
@@ -229,6 +230,7 @@
     <None Include="test_extension_simple.ss" />
     <None Include="test_generic_simple.swift" />
     <None Include="test_generic_workaround.swift" />
+    <None Include="test_gen_simple.swift" />
     <None Include="test_mutating.swift" />
     <None Include="test_observers.swift" />
     <None Include="test_private.swift" />

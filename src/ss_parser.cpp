@@ -105,7 +105,21 @@ TypeAnnotation Parser::parse_type_annotation() {
         do {
             ta.generic_args.push_back(parse_type_annotation());
         } while (match(TokenType::Comma));
-        consume(TokenType::Greater, "Expected '>' after generic arguments.");
+        
+        // Handle >> token for nested generics: Container<Box<Int>>
+        if (check(TokenType::RightShift)) {
+            // Consume >> and insert a virtual > token
+            advance();
+            
+            Token virtual_greater;
+            virtual_greater.type = TokenType::Greater;
+            virtual_greater.lexeme = ">";
+            virtual_greater.line = previous().line;
+            
+            tokens_.insert(tokens_.begin() + current_, virtual_greater);
+        } else {
+            consume(TokenType::Greater, "Expected '>' after generic arguments.");
+        }
     }
 
     // Check for trailing '?' to mark optional
@@ -1787,7 +1801,25 @@ ExprPtr Parser::primary() {
                 generic_args.push_back(arg);
             } while (match(TokenType::Comma));
             
-            consume(TokenType::Greater, "Expected '>' after generic type arguments.");
+            // Handle >> token for nested generics: Container<Box<Int>>
+            // The >> is lexed as RightShift, but we need to treat it as two > tokens
+            if (check(TokenType::RightShift)) {
+                // Consume >> and insert a virtual > token for the next level
+                advance();
+                
+                // Insert a Greater token at current position
+                // We do this by adding it to the tokens list
+                Token virtual_greater;
+                virtual_greater.type = TokenType::Greater;
+                virtual_greater.lexeme = ">";
+                virtual_greater.line = previous().line;
+                
+                // Insert at current position
+                tokens_.insert(tokens_.begin() + current_, virtual_greater);
+            } else {
+                consume(TokenType::Greater, "Expected '>' after generic type arguments.");
+            }
+            
             ident->generic_args = std::move(generic_args);
         }
         

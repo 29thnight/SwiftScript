@@ -71,6 +71,11 @@ struct Expr {
     ExprKind kind;
     uint32_t line{0};
     virtual ~Expr() = default;
+    
+    // Deep copy for generic specialization
+    // Default implementation returns nullptr (should be overridden)
+    virtual ExprPtr clone() const { return nullptr; }
+    
 protected:
     explicit Expr(ExprKind k) : kind(k) {}
 };
@@ -82,6 +87,14 @@ struct LiteralExpr : Expr {
     explicit LiteralExpr(Value v) : Expr(ExprKind::Literal), value(v) {}
     explicit LiteralExpr(std::string s)
         : Expr(ExprKind::Literal), value(Value::null()), string_value(std::move(s)) {}
+    
+    ExprPtr clone() const override {
+        auto copy = std::make_unique<LiteralExpr>();
+        copy->line = line;
+        copy->value = value;
+        copy->string_value = string_value;
+        return copy;
+    }
 };
 
 struct IdentifierExpr : Expr {
@@ -89,6 +102,13 @@ struct IdentifierExpr : Expr {
     std::vector<TypeAnnotation> generic_args;  // Generic type arguments (e.g., Box<Int>)
     IdentifierExpr() : Expr(ExprKind::Identifier) {}
     explicit IdentifierExpr(std::string n) : Expr(ExprKind::Identifier), name(std::move(n)) {}
+    
+    ExprPtr clone() const override {
+        auto copy = std::make_unique<IdentifierExpr>(name);
+        copy->line = line;
+        copy->generic_args = generic_args;
+        return copy;
+    }
 };
 
 struct UnaryExpr : Expr {
@@ -97,6 +117,14 @@ struct UnaryExpr : Expr {
     UnaryExpr() : Expr(ExprKind::Unary), op(TokenType::Minus) {}
     UnaryExpr(TokenType o, ExprPtr operand)
         : Expr(ExprKind::Unary), op(o), operand(std::move(operand)) {}
+    
+    ExprPtr clone() const override {
+        auto copy = std::make_unique<UnaryExpr>();
+        copy->line = line;
+        copy->op = op;
+        if (operand) copy->operand = operand->clone();
+        return copy;
+    }
 };
 
 struct BinaryExpr : Expr {
