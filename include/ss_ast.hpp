@@ -577,6 +577,7 @@ struct ClassDeclStmt : Stmt {
 // Struct method declaration with mutating flag
 struct StructMethodDecl {
     std::string name;
+    uint32_t line{0};
     std::vector<std::string> generic_params;
     std::vector<GenericConstraint> generic_constraints;  // where T: Protocol
     std::vector<ParamDecl> params;

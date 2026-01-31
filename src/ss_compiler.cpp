@@ -53,7 +53,9 @@ for (const auto& stmt : specialized_program) {
     compile_stmt(stmt.get());
 }
 
-emit_op(OpCode::OP_NIL, 0);
+    emit_auto_entry_main_call();
+
+    emit_op(OpCode::OP_NIL, 0);
     emit_op(OpCode::OP_HALT, 0);
     return chunk_;
 }
@@ -377,6 +379,10 @@ void Compiler::visit(ClassDeclStmt* stmt) {
 
     // Methods: class object remains on stack top
     for (const auto& method : stmt->methods) {
+        if (method->is_static && method->name == "main" && method->params.empty()) {
+            record_entry_main_static(stmt->name, method->line);
+        }
+
         if (method->is_override && !has_superclass) {
             throw CompilerError("'override' used in class without superclass", method->line);
         }
@@ -704,6 +710,10 @@ if (scope_depth_ > 0) {
 
     // Compile methods (separate static and instance methods)
     for (const auto& method : stmt->methods) {
+        if (method->is_static && method->name == "main" && method->params.empty()) {
+            record_entry_main_static(stmt->name, method->line);
+        }
+
         if (method->is_static) {
             // Static method: no 'self' parameter
             FunctionPrototype proto;
@@ -1792,38 +1802,55 @@ void Compiler::visit(SwitchStmt* stmt) {
 }
 
 void Compiler::visit(ImportStmt* stmt) {
+    const std::string& module_key = stmt->module_path;
+
     // Check for circular dependency
-    if (compiling_modules_.find(stmt->module_path) != compiling_modules_.end()) {
-        throw CompilerError("Circular import detected: " + stmt->module_path, stmt->line);
+    if (compiling_modules_.find(module_key) != compiling_modules_.end()) {
+        throw CompilerError("Circular import detected: " + module_key, stmt->line);
     }
     
     // Check if already imported
-    if (imported_modules_.find(stmt->module_path) != imported_modules_.end()) {
+    if (imported_modules_.find(module_key) != imported_modules_.end()) {
         // Module already imported, skip
         return;
     }
     
     // Mark as imported
-    imported_modules_.insert(stmt->module_path);
-    compiling_modules_.insert(stmt->module_path);
+    imported_modules_.insert(module_key);
+    compiling_modules_.insert(module_key);
     
     try {
-        // Load and parse the imported module
-        std::string full_path = stmt->module_path;
-        if (!base_directory_.empty() && stmt->module_path[0] != '/' && stmt->module_path[0] != '\\') {
-            // Resolve relative path
-            full_path = base_directory_ + "/" + stmt->module_path;
+        std::string full_path;
+        std::string source;
+
+        if (module_resolver_) {
+            std::string err;
+            if (!module_resolver_->ResolveAndLoad(module_key, full_path, source, err)) {
+                 throw CompilerError("Cannot resolve import '" + module_key + "': " + err, stmt->line);
+            }
+        } else {
+            // Fallback (existing behavior): base_directory + module_path (append .ss automatically if needed)
+            full_path = module_key;
+            if (!base_directory_.empty() && module_key[0] != '/' && module_key[0] != '\\') {
+                // Resolve relative path
+                full_path = base_directory_ + "/" + module_key;
+            }
+            
+            // Auto-append .ss extension
+            if (full_path.size() < 3 || full_path.substr(full_path.size()-3) != ".ss") {
+                full_path += ".ss";
+            }
+            
+            // Read the file content
+            std::ifstream file(full_path);
+            if (!file.is_open()) {
+                throw CompilerError("Cannot open import file: " + full_path, stmt->line);
+            }
+            
+            source.assign((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+            file.close();
         }
-        
-        // Read the file content
-        std::ifstream file(full_path);
-        if (!file.is_open()) {
-            throw CompilerError("Cannot open import file: " + full_path, stmt->line);
-        }
-        
-        std::string source((std::istreambuf_iterator<char>(file)),
-                          std::istreambuf_iterator<char>());
-        file.close();
         
         // Tokenize and parse the imported module
         Lexer lexer(source);
@@ -1839,11 +1866,11 @@ void Compiler::visit(ImportStmt* stmt) {
         }
         
         // Remove from compiling set
-        compiling_modules_.erase(stmt->module_path);
+        compiling_modules_.erase(module_key);
         
     } catch (const std::exception& e) {
-        compiling_modules_.erase(stmt->module_path);
-        throw CompilerError("Error importing module '" + stmt->module_path + "': " + e.what(), stmt->line);
+        compiling_modules_.erase(module_key);
+        throw CompilerError("Error importing module '" + module_key + "': " + e.what(), stmt->line);
     }
 }
 
@@ -2109,6 +2136,11 @@ void Compiler::visit(FuncDeclStmt* stmt) {
         }
         emit_op(OpCode::OP_SET_GLOBAL, stmt->line);
         emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+        
+        if (stmt->name == "main" && stmt->params.empty()) {
+            record_entry_main_global(stmt);
+        }
+
         emit_op(OpCode::OP_POP, stmt->line);
     } else {
         declare_local(stmt->name, false);
@@ -3397,6 +3429,53 @@ result.reserve(program.size() + needed_specializations.size());
     }
     
     return result;
+}
+
+void Compiler::record_entry_main_global(const FuncDeclStmt* stmt) {
+    if (entry_main_.kind != EntryMainInfo::Kind::None) {
+        throw CompilerError("Multiple entry main() found", stmt->line);
+    }
+    entry_main_.kind = EntryMainInfo::Kind::GlobalFunc;
+    entry_main_.line = stmt->line;
+}
+
+void Compiler::record_entry_main_static(const std::string& type_name, int line) {
+    if (entry_main_.kind != EntryMainInfo::Kind::None) {
+        throw CompilerError("Multiple entry main() found", line);
+    }
+    entry_main_.kind = EntryMainInfo::Kind::StaticMethod;
+    entry_main_.type_name = type_name;
+    entry_main_.line = line;
+}
+
+void Compiler::emit_auto_entry_main_call() {
+    if (entry_main_.kind == EntryMainInfo::Kind::None) return;
+
+    if (entry_main_.kind == EntryMainInfo::Kind::GlobalFunc) {
+        // GET_GLOBAL "main" -> CALL 0 -> POP
+        emit_variable_get("main", entry_main_.line);
+        emit_op(OpCode::OP_CALL, entry_main_.line);
+        emit_short(0, entry_main_.line);
+        emit_op(OpCode::OP_POP, entry_main_.line);
+        return;
+    }
+
+    if (entry_main_.kind == EntryMainInfo::Kind::StaticMethod) {
+        // GET_GLOBAL TypeName -> GET_PROPERTY "main" -> CALL 0 -> POP
+        emit_variable_get(entry_main_.type_name, entry_main_.line);
+
+        size_t name_idx = identifier_constant("main");
+        if (name_idx > std::numeric_limits<uint16_t>::max()) {
+            throw CompilerError("Too many identifiers", entry_main_.line);
+        }
+        emit_op(OpCode::OP_GET_PROPERTY, entry_main_.line);
+        emit_short(static_cast<uint16_t>(name_idx), entry_main_.line);
+
+        emit_op(OpCode::OP_CALL, entry_main_.line);
+        emit_short(0, entry_main_.line);
+        emit_op(OpCode::OP_POP, entry_main_.line);
+        return;
+    }
 }
 
 } // namespace swiftscript

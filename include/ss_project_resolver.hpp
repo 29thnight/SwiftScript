@@ -1,0 +1,31 @@
+#pragma once
+#include "ss_compiler.hpp"
+#include <filesystem>
+#include <unordered_map>
+#include <vector>
+#include <string>
+
+namespace swiftscript {
+
+class ProjectModuleResolver : public IModuleResolver {
+public:
+    explicit ProjectModuleResolver(std::vector<std::filesystem::path> import_roots)
+        : roots_(std::move(import_roots)) {}
+
+    bool ResolveAndLoad(const std::string& module_name,
+                        std::string& out_full_path,
+                        std::string& out_source,
+                        std::string& out_error) override;
+
+private:
+    std::vector<std::filesystem::path> roots_;
+
+    // module_name -> resolved path string
+    std::unordered_map<std::string, std::string> resolve_cache_;
+    // resolved full_path -> source text
+    std::unordered_map<std::string, std::string> source_cache_;
+
+    static bool ReadAllText(const std::filesystem::path& p, std::string& out, std::string& err);
+};
+
+} // namespace swiftscript

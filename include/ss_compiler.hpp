@@ -21,16 +21,36 @@ private:
     uint32_t line_;
 };
 
+struct IModuleResolver {
+    virtual ~IModuleResolver() = default;
+
+    // module_name: "math" or "foo/bar"
+    // out_full_path: resolved file path
+    // out_source: loaded source text (cached possible)
+    virtual bool ResolveAndLoad(const std::string& module_name,
+                                std::string& out_full_path,
+                                std::string& out_source,
+                                std::string& out_error) = 0;
+};
+
+struct EntryMainInfo {
+    enum class Kind { None, GlobalFunc, StaticMethod } kind{Kind::None};
+    std::string type_name; // Used only when Kind is StaticMethod
+    int line{0};
+};
+
 class Compiler {
 public:
     Chunk compile(const std::vector<StmtPtr>& program);
     
     // Set base directory for resolving relative import paths
     void set_base_directory(const std::string& dir) { base_directory_ = dir; }
+    void set_module_resolver(IModuleResolver* r) { module_resolver_ = r; }
 
 private:
     Chunk chunk_;
     std::string base_directory_;  // Base directory for resolving imports
+    IModuleResolver* module_resolver_{nullptr};
     std::unordered_set<std::string> imported_modules_;  // Track imported modules to prevent duplicates
     std::unordered_set<std::string> compiling_modules_; // Track modules being compiled (circular dependency detection)
     
@@ -108,6 +128,12 @@ private:
     void visit(ReturnStmt* stmt);
     void visit(FuncDeclStmt* stmt);
     void visit(ExprStmt* stmt);
+
+    // Entry point handling
+    EntryMainInfo entry_main_;
+    void record_entry_main_global(const FuncDeclStmt* stmt);
+    void record_entry_main_static(const std::string& type_name, int line);
+    void emit_auto_entry_main_call();
 
     void visit(LiteralExpr* expr);
     void visit(IdentifierExpr* expr);

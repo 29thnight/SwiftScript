@@ -248,31 +248,50 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::Import)) {
         return import_declaration();
     }
+    
+    // access control
+    AccessLevel access_level = AccessLevel::Internal;
+    if (match(TokenType::Public)) {
+        access_level = AccessLevel::Public;
+    } else if (match(TokenType::Private)) {
+        access_level = AccessLevel::Private;
+    } else if (match(TokenType::Internal)) {
+        access_level = AccessLevel::Internal;
+    } else if (match(TokenType::Fileprivate)) {
+        access_level = AccessLevel::Fileprivate;
+    }
+
     if (check(TokenType::Var) || check(TokenType::Let)) {
-        return var_declaration();
+        return var_declaration(access_level);
     }
     if (check(TokenType::Class)) {
-        return class_declaration();
+        return class_declaration(access_level);
     }
     if (check(TokenType::Struct)) {
-        return struct_declaration();
+        return struct_declaration(access_level);
     }
     if (check(TokenType::Enum)) {
-        return enum_declaration();
+        return enum_declaration(access_level);
     }
     if (check(TokenType::Protocol)) {
-        return protocol_declaration();
+        return protocol_declaration(access_level);
     }
     if (check(TokenType::Extension)) {
-        return extension_declaration();
+        return extension_declaration(access_level);
     }
     if (check(TokenType::Func)) {
-        return func_declaration();
+        return func_declaration(false, access_level);
     }
+
+    // Access modifiers must be followed by a declaration
+    if (access_level != AccessLevel::Internal) {
+        error(peek(), "Expected declaration after access modifier.");
+    }
+
     return statement();
 }
 
-StmtPtr Parser::var_declaration() {
+StmtPtr Parser::var_declaration(AccessLevel access_level) {
     // var x: Int? = expr
     // let x = expr
     // let (a, b) = tuple  -- Tuple destructuring
@@ -286,6 +305,7 @@ StmtPtr Parser::var_declaration() {
     }
 
     auto stmt = parse_variable_decl(is_let);
+    stmt->access_level = access_level;
 
     // Semicolons are optional (Swift-style)
     match(TokenType::Semicolon);
@@ -420,27 +440,63 @@ StmtPtr Parser::parse_tuple_destructuring(bool is_let, uint32_t line) {
 StmtPtr Parser::import_declaration() {
     const Token& import_tok = advance();  // consume 'import'
     
-    // Expect a string literal: import "path/to/module.ss"
-    const Token& path_tok = consume(TokenType::String, "Expected string literal after 'import'.");
-    
     auto stmt = std::make_unique<ImportStmt>();
     stmt->line = import_tok.line;
-    stmt->module_path = std::string(path_tok.lexeme);
-    
-    // Remove surrounding quotes if present
-    if (!stmt->module_path.empty()) {
-        if (stmt->module_path.front() == '"' && stmt->module_path.back() == '"') {
-            stmt->module_path = stmt->module_path.substr(1, stmt->module_path.length() - 2);
+
+    // 1) Existing style: import "path/to/module.ss"
+    if (check(TokenType::String)) {
+        const Token& path_tok = advance();
+        stmt->module_path = std::string(path_tok.lexeme);
+        
+        // Remove surrounding quotes if present
+        if (!stmt->module_path.empty()) {
+            if (stmt->module_path.front() == '"' && stmt->module_path.back() == '"') {
+                stmt->module_path = stmt->module_path.substr(1, stmt->module_path.length() - 2);
+            }
         }
+        
+        match(TokenType::Semicolon);
+        return stmt;
     }
+
+    // 2) New style: import math / import foo.bar
+    const Token& first = consume(TokenType::Identifier, "Expected module name after 'import'.");
+    
+    std::string mod = std::string(first.lexeme);
+    
+    // dotted path: foo.bar.baz -> foo/bar/baz
+    while (match(TokenType::Dot)) {
+        const Token& part = consume(TokenType::Identifier, "Expected identifier after '.'.");
+        mod += "/";
+        mod += std::string(part.lexeme);
+    }
+    
+    stmt->module_path = std::move(mod);
     
     // Semicolons are optional
     match(TokenType::Semicolon);
     return stmt;
 }
 
-StmtPtr Parser::func_declaration() {
-    advance();  // consume 'func'
+StmtPtr Parser::func_declaration(bool is_static, AccessLevel access_level) {
+if (check(TokenType::Func)) {
+    advance();  // consume 'func' only if it's there (it might be consumed by caller if logic differs, but standard route checks it in declaration())
+    // Wait, declaration() does check(Func) but does NOT consume it.
+    // So we must consume it here.
+}
+// However, existing func_declaration implementation starts with advance(). 
+// And declaration() checks TokenType::Func.
+    
+// Existing code:
+// StmtPtr Parser::func_declaration() {
+//     advance(); // consume 'func' 
+    
+// The previous implementation of declaration() was:
+// if (check(TokenType::Func)) return func_declaration();
+    
+// This implies func_declaration consumes 'func'.
+    
+// So let's keep that behavior.
     auto is_operator_name = [](TokenType type) {
         return TokenUtils::is_binary_operator(type) ||
                TokenUtils::is_unary_operator(type) ||
@@ -676,6 +732,7 @@ while (!check(TokenType::RightBrace) && !is_at_end()) {
 
         auto method = std::make_unique<StructMethodDecl>();
         method->name = std::string(method_name.lexeme);
+        method->line = method_name.line;
         method->is_mutating = is_mutating;
         method->is_static = is_static;
         method->access_level = access_level;
@@ -824,6 +881,7 @@ StmtPtr Parser::enum_declaration() {
 
             auto method = std::make_unique<StructMethodDecl>();
             method->name = std::string(method_name.lexeme);
+            method->line = method_name.line;
             method->generic_params = parse_generic_params();
 
             // Parameter list
@@ -850,6 +908,7 @@ StmtPtr Parser::enum_declaration() {
 
             auto method = std::make_unique<StructMethodDecl>();
             method->name = std::string(prop_name.lexeme);
+            method->line = prop_name.line;
             method->return_type = prop_type;
             method->is_computed_property = true;  // Mark as computed property
             
@@ -1098,6 +1157,7 @@ StmtPtr Parser::extension_declaration() {
 
             auto method = std::make_unique<StructMethodDecl>();
             method->name = std::string(method_name.lexeme);
+            method->line = method_name.line;
             method->is_mutating = is_mutating;
             method->is_static = is_static;
             method->access_level = access_level;
@@ -1129,6 +1189,7 @@ StmtPtr Parser::extension_declaration() {
 
             auto computed_prop = std::make_unique<StructMethodDecl>();
             computed_prop->name = std::string(prop_name.lexeme);
+            computed_prop->line = prop_name.line;
             computed_prop->is_computed_property = true;
             computed_prop->is_static = is_static;
 

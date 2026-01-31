@@ -4,6 +4,7 @@
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
 #include "ss_vm.hpp"
+#include "ss_runner.hpp"
 #include <fstream>
 #include <chrono>
 #include <iomanip>
@@ -1176,10 +1177,96 @@ TEST(TupleTest, FuncReturnTupleDestructuring) {
 }
 
 // ============================================================================
+// Project Runner Tests
+// ============================================================================
+#include <filesystem>
+namespace fs = std::filesystem;
+
+class ProjectRunnerTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        if (fs::exists("TestProject")) fs::remove_all("TestProject");
+        fs::create_directories("TestProject/Libs");
+        fs::create_directories("TestProject/Scripts");
+    }
+    void TearDown() override {
+        if (fs::exists("TestProject")) fs::remove_all("TestProject");
+    }
+    void CreateFile(const std::string& path, const std::string& content) {
+        std::ofstream f(path);
+        f << content;
+    }
+};
+
+TEST_F(ProjectRunnerTest, BasicProjectRunner) {
+    CreateFile("TestProject/Libs/MathLib.ss", "public func add(a: Int, b: Int) -> Int { return a + b; }");
+    CreateFile("TestProject/Scripts/main.ss", 
+        "import MathLib\n"
+        "print(add(a: 10, b: 20))\n"
+        "func main() {\n"
+        "    print(\"Main executed\")\n"
+        "}\n"
+    );
+    CreateFile("TestProject/project.ssproject",
+        "<Project>\n"
+        "    <Entry>Scripts/main.ss</Entry>\n"
+        "    <ImportRoots>\n"
+        "        <Root>Libs</Root>\n"
+        "        <Root>Scripts</Root>\n"
+        "    </ImportRoots>\n"
+        "</Project>\n"
+    );
+
+    swiftscript::SSProject project;
+    std::string err;
+    ASSERT_TRUE(swiftscript::LoadSSProject("TestProject/project.ssproject", project, err)) << err;
+
+    testing::internal::CaptureStdout();
+    try {
+        swiftscript::VM vm;
+        swiftscript::RunProject(vm, project);
+    } catch (const std::exception& e) {
+        std::string out = testing::internal::GetCapturedStdout();
+        FAIL() << e.what() << "\nOutput: " << out;
+    }
+    std::string out = testing::internal::GetCapturedStdout();
+    EXPECT_TRUE(out.find("30") != std::string::npos);
+    EXPECT_TRUE(out.find("Main executed") != std::string::npos);
+}
+
+// ============================================================================
 // Main function for Google Test
 // ============================================================================
 
 int main(int argc, char** argv) {
+    // Check for -run command first
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "-run") {
+            if (i + 1 < argc) {
+                std::string projectPath = argv[i + 1];
+                swiftscript::SSProject project; // Use qualified name
+                std::string error;
+                
+                if (swiftscript::LoadSSProject(projectPath, project, error)) {
+                    try {
+                        swiftscript::VM vm;
+                        swiftscript::RunProject(vm, project);
+                        return 0;
+                    } catch (const std::exception& e) {
+                        std::cerr << "Execution error: " << e.what() << std::endl;
+                        return 1;
+                    }
+                } else {
+                    std::cerr << "Failed to load project: " << error << std::endl;
+                    return 1;
+                }
+            } else {
+                std::cerr << "Usage: -run <path_to_ssproject>" << std::endl;
+                return 1;
+            }
+        }
+    }
+
     ::testing::InitGoogleTest(&argc, argv);
     
     // Add custom listener for file logging

@@ -137,6 +137,9 @@
     <ClInclude Include="include\ss_core.hpp" />
     <ClInclude Include="include\ss_lexer.hpp" />
     <ClInclude Include="include\ss_parser.hpp" />
+    <ClInclude Include="include\ss_project.hpp" />
+    <ClInclude Include="include\ss_project_resolver.hpp" />
+    <ClInclude Include="include\ss_runner.hpp" />
     <ClInclude Include="include\ss_token.hpp" />
     <ClInclude Include="include\ss_type_checker.hpp" />
     <ClInclude Include="include\ss_value.hpp" />
@@ -154,6 +157,8 @@
     <ClCompile Include="src\ss_compiler.cpp" />
     <ClCompile Include="src\ss_lexer.cpp" />
     <ClCompile Include="src\ss_parser.cpp" />
+    <ClCompile Include="src\ss_project.cpp" />
+    <ClCompile Include="src\ss_project_resolver.cpp" />
     <ClCompile Include="src\ss_type_checker.cpp" />
     <ClCompile Include="src\ss_token.cpp" />
     <ClCompile Include="src\ss_value.cpp" />
@@ -199,6 +204,7 @@
     <ClCompile Include="test\test_optional.cpp" />
     <ClCompile Include="test\test_pattern_matching.cpp" />
     <ClCompile Include="test\test_phase1.cpp" />
+    <ClCompile Include="test\test_project_runner.cpp" />
     <ClCompile Include="test\test_protocol.cpp" />
     <ClCompile Include="test\test_simple.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
@@ -216,6 +222,9 @@
     <None Include="docs\protocol-implementation.md" />
     <None Include="GRAMMAR_TODO.md" />
     <None Include="IMPLEMENTATION_STATUS.md" />
+    <None Include="TestProject\Libs\MathLib.ss" />
+    <None Include="TestProject\project.ssproject" />
+    <None Include="TestProject\Scripts\main.ss" />
     <None Include="test\build.bat" />
     <None Include="test\build.sh" />
     <None Include="test\CHECKLIST.md" />

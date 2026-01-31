@@ -27,13 +27,13 @@ private:
 
     // ---- Statement parsers ----
     StmtPtr declaration();
-    StmtPtr var_declaration();
-    StmtPtr func_declaration();
-    StmtPtr class_declaration();
-    StmtPtr struct_declaration();  // Struct declaration parser
-    StmtPtr enum_declaration();    // Enum declaration parser
-    StmtPtr protocol_declaration(); // Protocol declaration parser
-    StmtPtr extension_declaration(); // Extension declaration parser
+    StmtPtr var_declaration(AccessLevel access_level = AccessLevel::Internal);
+    StmtPtr func_declaration(bool is_static = false, AccessLevel access_level = AccessLevel::Internal);
+    StmtPtr class_declaration(AccessLevel access_level = AccessLevel::Internal);
+    StmtPtr struct_declaration(AccessLevel access_level = AccessLevel::Internal);  // Struct declaration parser
+    StmtPtr enum_declaration(AccessLevel access_level = AccessLevel::Internal);    // Enum declaration parser
+    StmtPtr protocol_declaration(AccessLevel access_level = AccessLevel::Internal); // Protocol declaration parser
+    StmtPtr extension_declaration(AccessLevel access_level = AccessLevel::Internal); // Extension declaration parser
     StmtPtr import_declaration();  // Import statement parser
     std::unique_ptr<VarDeclStmt> parse_variable_decl(bool is_let);
     StmtPtr parse_tuple_destructuring(bool is_let, uint32_t line);
