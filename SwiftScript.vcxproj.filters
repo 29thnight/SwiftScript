@@ -188,9 +188,6 @@
     <ClCompile Include="src\ss_project.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="test\test_project_runner.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="test\build.sh" />

@@ -29,6 +29,8 @@ private:
     StmtPtr declaration();
     StmtPtr var_declaration(AccessLevel access_level = AccessLevel::Internal);
     StmtPtr func_declaration(bool is_static = false, AccessLevel access_level = AccessLevel::Internal);
+    StmtPtr class_declaration();
+    StmtPtr struct_declaration();
     StmtPtr class_declaration(AccessLevel access_level = AccessLevel::Internal);
     StmtPtr struct_declaration(AccessLevel access_level = AccessLevel::Internal);  // Struct declaration parser
     StmtPtr enum_declaration(AccessLevel access_level = AccessLevel::Internal);    // Enum declaration parser
@@ -37,6 +39,7 @@ private:
     StmtPtr import_declaration();  // Import statement parser
     std::unique_ptr<VarDeclStmt> parse_variable_decl(bool is_let);
     StmtPtr parse_tuple_destructuring(bool is_let, uint32_t line);
+    StmtPtr protocol_declaration();
     StmtPtr statement();
     StmtPtr if_statement();
     StmtPtr guard_statement();

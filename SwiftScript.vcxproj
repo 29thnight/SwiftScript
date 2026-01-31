@@ -204,7 +204,6 @@
     <ClCompile Include="test\test_optional.cpp" />
     <ClCompile Include="test\test_pattern_matching.cpp" />
     <ClCompile Include="test\test_phase1.cpp" />
-    <ClCompile Include="test\test_project_runner.cpp" />
     <ClCompile Include="test\test_protocol.cpp" />
     <ClCompile Include="test\test_simple.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
