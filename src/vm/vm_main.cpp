@@ -16,7 +16,7 @@ namespace swiftscript
         if (!in) {
             throw std::runtime_error("Cannot open .ssasm file: " + ssasm_path);
         }
-        Chunk chunk = Chunk::deserialize(in);
+        Assembly chunk = Assembly::deserialize(in);
         return vm.execute(chunk);
     }
 }

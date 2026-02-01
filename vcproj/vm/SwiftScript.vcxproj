@@ -139,6 +139,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\vm\pch_.cpp" />
+    <ClCompile Include="..\..\src\vm\vm_main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\common\SwiftScriptLib.vcxproj">
