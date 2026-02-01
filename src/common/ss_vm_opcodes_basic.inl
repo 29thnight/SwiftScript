@@ -400,10 +400,10 @@ namespace swiftscript {
                     arg_names.emplace_back(std::nullopt);
                     continue;
                 }
-                if (name_idx >= vm.chunk_->strings.size()) {
+                if (name_idx >= vm.chunk_->string_table.size()) {
                     throw std::runtime_error("Argument name index out of range.");
                 }
-                arg_names.emplace_back(vm.chunk_->strings[name_idx]);
+                arg_names.emplace_back(vm.chunk_->string_table[name_idx]);
             }
 
             if (vm.stack_.size() < arg_count + 1) {

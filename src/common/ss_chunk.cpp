@@ -7,8 +7,6 @@ void Assembly::write(uint8_t byte, uint32_t line) {
     auto& body = ensure_primary_body();
     body.bytecode.push_back(byte);
     body.line_info.push_back(line);
-    code.push_back(byte);
-    lines.push_back(line);
 }
 
 void Assembly::write_op(OpCode op, uint32_t line) {
@@ -22,23 +20,23 @@ size_t Assembly::add_constant(Value value) {
 
 size_t Assembly::add_string(const std::string& str) {
     // �̹� �����ϴ� ���ڿ����� Ȯ��
-    for (size_t i = 0; i < strings.size(); ++i) {
-        if (strings[i] == str) {
+    for (size_t i = 0; i < string_table.size(); ++i) {
+        if (string_table[i] == str) {
             return i;
         }
     }
-    strings.push_back(str);
-    return strings.size() - 1;
+    string_table.push_back(str);
+    return string_table.size() - 1;
 }
 
 size_t Assembly::add_function(FunctionPrototype proto) {
-    functions.push_back(std::move(proto));
-    return functions.size() - 1;
+    function_prototypes.push_back(std::move(proto));
+    return function_prototypes.size() - 1;
 }
 
 size_t Assembly::add_protocol(std::shared_ptr<Protocol> protocol) {
-    protocols.push_back(std::move(protocol));
-    return protocols.size() - 1;
+    protocol_definitions.push_back(std::move(protocol));
+    return protocol_definitions.size() - 1;
 }
 
 size_t Assembly::emit_jump(OpCode op, uint32_t line) {
@@ -57,13 +55,9 @@ void Assembly::patch_jump(size_t offset) {
         throw std::runtime_error("Too much code to jump over");
     }
 
-    code[offset] = (jump >> 8) & 0xFF;
-    code[offset + 1] = jump & 0xFF;
-    if (!method_bodies.empty()) {
-        auto& body = method_bodies.front();
-        body.bytecode[offset] = (jump >> 8) & 0xFF;
-        body.bytecode[offset + 1] = jump & 0xFF;
-    }
+    auto& body = ensure_primary_body();
+    body.bytecode[offset] = (jump >> 8) & 0xFF;
+    body.bytecode[offset + 1] = jump & 0xFF;
 }
 
 const std::vector<uint8_t>& Assembly::bytecode() const {
@@ -76,7 +70,8 @@ const std::vector<uint8_t>& Assembly::bytecode() const {
     if (!method_bodies.empty()) {
         return method_bodies.front().bytecode;
     }
-    return code;
+    static const std::vector<uint8_t> empty{};
+    return empty;
 }
 
 const std::vector<uint32_t>& Assembly::line_info() const {
@@ -89,14 +84,12 @@ const std::vector<uint32_t>& Assembly::line_info() const {
     if (!method_bodies.empty()) {
         return method_bodies.front().line_info;
     }
-    return lines;
+    static const std::vector<uint32_t> empty{};
+    return empty;
 }
 
 const std::vector<Value>& Assembly::constant_pool() const {
-    if (!global_constant_pool.empty()) {
-        return global_constant_pool;
-    }
-    return constants;
+    return global_constant_pool;
 }
 
 size_t Assembly::code_size() const {
@@ -105,10 +98,7 @@ size_t Assembly::code_size() const {
 
 MethodBody& Assembly::ensure_primary_body() {
     if (method_bodies.empty()) {
-        MethodBody body{};
-        body.bytecode = code;
-        body.line_info = lines;
-        method_bodies.push_back(std::move(body));
+        method_bodies.emplace_back();
     }
     return method_bodies.front();
 }
@@ -327,8 +317,8 @@ size_t Assembly::string_instruction(const char* name, size_t offset) const {
     std::cout << std::setw(16) << std::left << name << " " 
               << std::setw(4) << str_idx << " '";
     
-    if (str_idx < strings.size()) {
-        std::cout << strings[str_idx];
+    if (str_idx < string_table.size()) {
+        std::cout << string_table[str_idx];
     }
     
     std::cout << "'\n";
@@ -371,36 +361,100 @@ void Assembly::serialize(std::ostream& out) const
     h.verMinor = kVerMinor;
     WritePOD(out, h);
 
-    // code / lines
-    WriteVectorPOD(out, code);
-    WriteVectorPOD(out, lines);
+    WriteString(out, manifest.name);
+    WritePOD(out, manifest.version_major);
+    WritePOD(out, manifest.version_minor);
 
-    // constants
     {
-        const auto& constants_for_pool = constants.empty() ? global_constant_pool : constants;
-        uint32_t n = (uint32_t)constants_for_pool.size();
+        uint32_t n = static_cast<uint32_t>(string_table.size());
         WritePOD(out, n);
-        for (const Value& v : constants_for_pool)
+        for (const auto& s : string_table) {
+            WriteString(out, s);
+        }
+    }
+
+    {
+        uint32_t n = (uint32_t)type_definitions.size();
+        WritePOD(out, n);
+        for (const auto& t : type_definitions)
         {
-            // ===== 반드시 구현 필요 =====
-            // Value가 스스로 직렬화/역직렬화를 제공하도록
+            WritePOD(out, t.name);
+            WritePOD(out, t.namespace_name);
+            WritePOD(out, t.flags);
+            WritePOD(out, t.base_type);
+            WritePOD(out, t.method_list.start);
+            WritePOD(out, t.method_list.count);
+            WritePOD(out, t.field_list.start);
+            WritePOD(out, t.field_list.count);
+            WritePOD(out, t.property_list.start);
+            WritePOD(out, t.property_list.count);
+            WriteVectorPOD(out, t.interfaces);
+        }
+    }
+
+    {
+        uint32_t n = (uint32_t)method_definitions.size();
+        WritePOD(out, n);
+        for (const auto& m : method_definitions)
+        {
+            WritePOD(out, m.name);
+            WritePOD(out, m.flags);
+            WritePOD(out, m.signature);
+            WritePOD(out, m.body_ptr);
+        }
+    }
+
+    {
+        uint32_t n = (uint32_t)field_definitions.size();
+        WritePOD(out, n);
+        for (const auto& f : field_definitions)
+        {
+            WritePOD(out, f.name);
+            WritePOD(out, f.flags);
+            WritePOD(out, f.type);
+        }
+    }
+
+    {
+        uint32_t n = (uint32_t)property_definitions.size();
+        WritePOD(out, n);
+        for (const auto& p : property_definitions)
+        {
+            WritePOD(out, p.name);
+            WritePOD(out, p.flags);
+            WritePOD(out, p.type);
+            WritePOD(out, p.getter);
+            WritePOD(out, p.setter);
+        }
+    }
+
+    {
+        uint32_t n = (uint32_t)global_constant_pool.size();
+        WritePOD(out, n);
+        for (const Value& v : global_constant_pool)
+        {
             v.serialize(out);
         }
     }
 
-    // strings
+    WriteVectorPOD(out, signature_blob);
+
     {
-        uint32_t n = (uint32_t)strings.size();
+        uint32_t n = (uint32_t)method_bodies.size();
         WritePOD(out, n);
-        for (const auto& s : strings) WriteString(out, s);
+        for (const auto& b : method_bodies)
+        {
+            WriteVectorPOD(out, b.bytecode);
+            WriteVectorPOD(out, b.line_info);
+            WritePOD(out, b.max_stack_depth);
+        }
     }
 
-    // functions
     {
-        uint32_t n = (uint32_t)functions.size();
+        uint32_t n = (uint32_t)function_prototypes.size();
         WritePOD(out, n);
 
-        for (const auto& fn : functions)
+        for (const auto& fn : function_prototypes)
         {
             WriteString(out, fn.name);
 
@@ -442,12 +496,11 @@ void Assembly::serialize(std::ostream& out) const
         }
     }
 
-    // protocols
     {
-        uint32_t n = (uint32_t)protocols.size();
+        uint32_t n = (uint32_t)protocol_definitions.size();
         WritePOD(out, n);
 
-        for (const auto& pr : protocols)
+        for (const auto& pr : protocol_definitions)
         {
             WritePOD(out, (uint8_t)(pr ? 1 : 0));
             if (!pr) continue;
@@ -478,100 +531,6 @@ void Assembly::serialize(std::ostream& out) const
             for (auto& ip : pr->inherited_protocols) WriteString(out, ip);
         }
     }
-
-    if (kVerMinor >= 1)
-    {
-        WriteString(out, manifest.name);
-        WritePOD(out, manifest.version_major);
-        WritePOD(out, manifest.version_minor);
-
-        {
-            uint32_t n = (uint32_t)type_definitions.size();
-            WritePOD(out, n);
-            for (const auto& t : type_definitions)
-            {
-                WritePOD(out, t.name);
-                WritePOD(out, t.namespace_name);
-                WritePOD(out, t.flags);
-                WritePOD(out, t.base_type);
-                WritePOD(out, t.method_list.start);
-                WritePOD(out, t.method_list.count);
-                WritePOD(out, t.field_list.start);
-                WritePOD(out, t.field_list.count);
-                WritePOD(out, t.property_list.start);
-                WritePOD(out, t.property_list.count);
-                WriteVectorPOD(out, t.interfaces);
-            }
-        }
-
-        {
-            uint32_t n = (uint32_t)method_definitions.size();
-            WritePOD(out, n);
-            for (const auto& m : method_definitions)
-            {
-                WritePOD(out, m.name);
-                WritePOD(out, m.flags);
-                WritePOD(out, m.signature);
-                WritePOD(out, m.body_ptr);
-            }
-        }
-
-        {
-            uint32_t n = (uint32_t)field_definitions.size();
-            WritePOD(out, n);
-            for (const auto& f : field_definitions)
-            {
-                WritePOD(out, f.name);
-                WritePOD(out, f.flags);
-                WritePOD(out, f.type);
-            }
-        }
-
-        {
-            uint32_t n = (uint32_t)property_definitions.size();
-            WritePOD(out, n);
-            for (const auto& p : property_definitions)
-            {
-                WritePOD(out, p.name);
-                WritePOD(out, p.flags);
-                WritePOD(out, p.type);
-                WritePOD(out, p.getter);
-                WritePOD(out, p.setter);
-            }
-        }
-
-        {
-            const auto& constants_for_pool = global_constant_pool.empty() ? constants : global_constant_pool;
-            uint32_t n = (uint32_t)constants_for_pool.size();
-            WritePOD(out, n);
-            for (const Value& v : constants_for_pool)
-            {
-                v.serialize(out);
-            }
-        }
-
-        WriteVectorPOD(out, signature_blob);
-
-        {
-            std::vector<MethodBody> bodies = method_bodies;
-            if (bodies.empty())
-            {
-                MethodBody body{};
-                body.bytecode = code;
-                body.line_info = lines;
-                bodies.push_back(std::move(body));
-            }
-
-            uint32_t n = (uint32_t)bodies.size();
-            WritePOD(out, n);
-            for (const auto& b : bodies)
-            {
-                WriteVectorPOD(out, b.bytecode);
-                WriteVectorPOD(out, b.line_info);
-                WritePOD(out, b.max_stack_depth);
-            }
-        }
-    }
 }
 
 Assembly Assembly::deserialize(std::istream& in)
@@ -586,133 +545,246 @@ Assembly Assembly::deserialize(std::istream& in)
         throw std::runtime_error("Assembly::deserialize unsupported version");
 
     Assembly c{};
-    c.code = ReadVectorPOD<uint8_t>(in);
-    c.lines = ReadVectorPOD<uint32_t>(in);
 
-    // constants
-    {
-        uint32_t n = ReadPOD<uint32_t>(in);
-        c.constants.reserve(n);
-        for (uint32_t i = 0; i < n; ++i)
+    if (h.verMinor < 3) {
+        std::vector<uint8_t> legacy_code = ReadVectorPOD<uint8_t>(in);
+        std::vector<uint32_t> legacy_lines = ReadVectorPOD<uint32_t>(in);
+
+        std::vector<Value> legacy_constants;
         {
-            // ===== 반드시 구현 필요 =====
-            c.constants.push_back(Value::deserialize(in));
-        }
-    }
-
-    // strings
-    {
-        uint32_t n = ReadPOD<uint32_t>(in);
-        c.strings.reserve(n);
-        for (uint32_t i = 0; i < n; ++i) c.strings.push_back(ReadString(in));
-    }
-
-    // functions
-    {
-        uint32_t n = ReadPOD<uint32_t>(in);
-        c.functions.reserve(n);
-
-        for (uint32_t i = 0; i < n; ++i)
-        {
-            FunctionPrototype fn{};
-            fn.name = ReadString(in);
-
-            uint32_t pn = ReadPOD<uint32_t>(in);
-            fn.params.reserve(pn);
-            for (uint32_t k = 0; k < pn; ++k) fn.params.push_back(ReadString(in));
-
-            uint32_t ln = ReadPOD<uint32_t>(in);
-            fn.param_labels.reserve(ln);
-            for (uint32_t k = 0; k < ln; ++k) fn.param_labels.push_back(ReadString(in));
-
-            uint32_t dn = ReadPOD<uint32_t>(in);
-            fn.param_defaults.resize(dn);
-            for (uint32_t k = 0; k < dn; ++k)
+            uint32_t n = ReadPOD<uint32_t>(in);
+            legacy_constants.reserve(n);
+            for (uint32_t i = 0; i < n; ++i)
             {
-                auto& d = fn.param_defaults[k];
-                d.has_default = ReadPOD<uint8_t>(in) != 0;
-                if (d.has_default)
-                {
-                    d.value = Value::deserialize(in);
+                legacy_constants.push_back(Value::deserialize(in));
+            }
+        }
 
-                    bool hasStr = ReadPOD<uint8_t>(in) != 0;
-                    if (hasStr) d.string_value = ReadString(in);
+        {
+            uint32_t n = ReadPOD<uint32_t>(in);
+            c.string_table.reserve(n);
+            for (uint32_t i = 0; i < n; ++i) c.string_table.push_back(ReadString(in));
+        }
+
+        {
+            uint32_t n = ReadPOD<uint32_t>(in);
+            c.function_prototypes.reserve(n);
+
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                FunctionPrototype fn{};
+                fn.name = ReadString(in);
+
+                uint32_t pn = ReadPOD<uint32_t>(in);
+                fn.params.reserve(pn);
+                for (uint32_t k = 0; k < pn; ++k) fn.params.push_back(ReadString(in));
+
+                uint32_t ln = ReadPOD<uint32_t>(in);
+                fn.param_labels.reserve(ln);
+                for (uint32_t k = 0; k < ln; ++k) fn.param_labels.push_back(ReadString(in));
+
+                uint32_t dn = ReadPOD<uint32_t>(in);
+                fn.param_defaults.resize(dn);
+                for (uint32_t k = 0; k < dn; ++k)
+                {
+                    auto& d = fn.param_defaults[k];
+                    d.has_default = ReadPOD<uint8_t>(in) != 0;
+                    if (d.has_default)
+                    {
+                        d.value = Value::deserialize(in);
+
+                        bool hasStr = ReadPOD<uint8_t>(in) != 0;
+                        if (hasStr) d.string_value = ReadString(in);
+                    }
+                }
+
+                uint32_t uvn = ReadPOD<uint32_t>(in);
+                fn.upvalues.reserve(uvn);
+                for (uint32_t k = 0; k < uvn; ++k)
+                {
+                    UpvalueInfo u{};
+                    u.index = ReadPOD<uint16_t>(in);
+                    u.is_local = ReadPOD<uint8_t>(in) != 0;
+                    fn.upvalues.push_back(u);
+                }
+
+                fn.is_initializer = ReadPOD<uint8_t>(in) != 0;
+                fn.is_override = ReadPOD<uint8_t>(in) != 0;
+
+                bool hasAssembly = ReadPOD<uint8_t>(in) != 0;
+                if (hasAssembly)
+                {
+                    fn.chunk = std::make_shared<Assembly>(Assembly::deserialize(in));
+                }
+
+                c.function_prototypes.push_back(std::move(fn));
+            }
+        }
+
+        {
+            uint32_t n = ReadPOD<uint32_t>(in);
+            c.protocol_definitions.reserve(n);
+
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                bool has = ReadPOD<uint8_t>(in) != 0;
+                if (!has) { c.protocol_definitions.push_back(nullptr); continue; }
+
+                auto pr = std::make_shared<Protocol>();
+                pr->name = ReadString(in);
+
+                uint32_t mn = ReadPOD<uint32_t>(in);
+                pr->method_requirements.reserve(mn);
+                for (uint32_t k = 0; k < mn; ++k)
+                {
+                    ProtocolMethodReq m{};
+                    m.name = ReadString(in);
+                    uint32_t pnn = ReadPOD<uint32_t>(in);
+                    m.param_names.reserve(pnn);
+                    for (uint32_t j = 0; j < pnn; ++j) m.param_names.push_back(ReadString(in));
+                    m.is_mutating = ReadPOD<uint8_t>(in) != 0;
+                    pr->method_requirements.push_back(std::move(m));
+                }
+
+                uint32_t pn = ReadPOD<uint32_t>(in);
+                pr->property_requirements.reserve(pn);
+                for (uint32_t k = 0; k < pn; ++k)
+                {
+                    ProtocolPropertyReq p{};
+                    p.name = ReadString(in);
+                    p.has_getter = ReadPOD<uint8_t>(in) != 0;
+                    p.has_setter = ReadPOD<uint8_t>(in) != 0;
+                    pr->property_requirements.push_back(std::move(p));
+                }
+
+                uint32_t inh = ReadPOD<uint32_t>(in);
+                pr->inherited_protocols.reserve(inh);
+                for (uint32_t k = 0; k < inh; ++k) pr->inherited_protocols.push_back(ReadString(in));
+
+                c.protocol_definitions.push_back(std::move(pr));
+            }
+        }
+
+        if (h.verMinor >= 1)
+        {
+            c.manifest.name = ReadString(in);
+            c.manifest.version_major = ReadPOD<uint16_t>(in);
+            c.manifest.version_minor = ReadPOD<uint16_t>(in);
+
+            {
+                uint32_t n = ReadPOD<uint32_t>(in);
+                c.type_definitions.reserve(n);
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    TypeDef t{};
+                    t.name = ReadPOD<string_idx>(in);
+                    t.namespace_name = ReadPOD<string_idx>(in);
+                    t.flags = ReadPOD<uint32_t>(in);
+                    t.base_type = ReadPOD<type_idx>(in);
+                    t.method_list.start = ReadPOD<uint32_t>(in);
+                    t.method_list.count = ReadPOD<uint32_t>(in);
+                    t.field_list.start = ReadPOD<uint32_t>(in);
+                    t.field_list.count = ReadPOD<uint32_t>(in);
+                    if (h.verMinor >= 2) {
+                        t.property_list.start = ReadPOD<uint32_t>(in);
+                        t.property_list.count = ReadPOD<uint32_t>(in);
+                    }
+                    t.interfaces = ReadVectorPOD<type_idx>(in);
+                    c.type_definitions.push_back(std::move(t));
                 }
             }
 
-            uint32_t uvn = ReadPOD<uint32_t>(in);
-            fn.upvalues.reserve(uvn);
-            for (uint32_t k = 0; k < uvn; ++k)
             {
-                UpvalueInfo u{};
-                u.index = ReadPOD<uint16_t>(in);
-                u.is_local = ReadPOD<uint8_t>(in) != 0;
-                fn.upvalues.push_back(u);
+                uint32_t n = ReadPOD<uint32_t>(in);
+                c.method_definitions.reserve(n);
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    MethodDef m{};
+                    m.name = ReadPOD<string_idx>(in);
+                    m.flags = ReadPOD<uint32_t>(in);
+                    m.signature = ReadPOD<signature_idx>(in);
+                    m.body_ptr = ReadPOD<body_idx>(in);
+                    c.method_definitions.push_back(std::move(m));
+                }
             }
 
-            fn.is_initializer = ReadPOD<uint8_t>(in) != 0;
-            fn.is_override = ReadPOD<uint8_t>(in) != 0;
-
-            bool hasAssembly = ReadPOD<uint8_t>(in) != 0;
-            if (hasAssembly)
             {
-                fn.chunk = std::make_shared<Assembly>(Assembly::deserialize(in));
+                uint32_t n = ReadPOD<uint32_t>(in);
+                c.field_definitions.reserve(n);
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    FieldDef f{};
+                    f.name = ReadPOD<string_idx>(in);
+                    f.flags = ReadPOD<uint32_t>(in);
+                    f.type = ReadPOD<type_idx>(in);
+                    c.field_definitions.push_back(std::move(f));
+                }
             }
 
-            c.functions.push_back(std::move(fn));
+            {
+                uint32_t n = ReadPOD<uint32_t>(in);
+                c.property_definitions.reserve(n);
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    PropertyDef p{};
+                    p.name = ReadPOD<string_idx>(in);
+                    p.flags = ReadPOD<uint32_t>(in);
+                    p.type = ReadPOD<type_idx>(in);
+                    p.getter = ReadPOD<method_idx>(in);
+                    p.setter = ReadPOD<method_idx>(in);
+                    c.property_definitions.push_back(std::move(p));
+                }
+            }
+
+            {
+                uint32_t n = ReadPOD<uint32_t>(in);
+                c.global_constant_pool.reserve(n);
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    c.global_constant_pool.push_back(Value::deserialize(in));
+                }
+            }
+
+            c.signature_blob = ReadVectorPOD<uint8_t>(in);
+
+            {
+                uint32_t n = ReadPOD<uint32_t>(in);
+                c.method_bodies.reserve(n);
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    MethodBody body{};
+                    body.bytecode = ReadVectorPOD<uint8_t>(in);
+                    body.line_info = ReadVectorPOD<uint32_t>(in);
+                    body.max_stack_depth = ReadPOD<uint32_t>(in);
+                    c.method_bodies.push_back(std::move(body));
+                }
+            }
         }
-    }
 
-    // protocols
-    {
-        uint32_t n = ReadPOD<uint32_t>(in);
-        c.protocols.reserve(n);
-
-        for (uint32_t i = 0; i < n; ++i)
+        if (c.global_constant_pool.empty())
         {
-            bool has = ReadPOD<uint8_t>(in) != 0;
-            if (!has) { c.protocols.push_back(nullptr); continue; }
-
-            auto pr = std::make_shared<Protocol>();
-            pr->name = ReadString(in);
-
-            uint32_t mn = ReadPOD<uint32_t>(in);
-            pr->method_requirements.reserve(mn);
-            for (uint32_t k = 0; k < mn; ++k)
-            {
-                ProtocolMethodReq m{};
-                m.name = ReadString(in);
-                uint32_t pnn = ReadPOD<uint32_t>(in);
-                m.param_names.reserve(pnn);
-                for (uint32_t j = 0; j < pnn; ++j) m.param_names.push_back(ReadString(in));
-                m.is_mutating = ReadPOD<uint8_t>(in) != 0;
-                pr->method_requirements.push_back(std::move(m));
-            }
-
-            uint32_t pn = ReadPOD<uint32_t>(in);
-            pr->property_requirements.reserve(pn);
-            for (uint32_t k = 0; k < pn; ++k)
-            {
-                ProtocolPropertyReq p{};
-                p.name = ReadString(in);
-                p.has_getter = ReadPOD<uint8_t>(in) != 0;
-                p.has_setter = ReadPOD<uint8_t>(in) != 0;
-                pr->property_requirements.push_back(std::move(p));
-            }
-
-            uint32_t inh = ReadPOD<uint32_t>(in);
-            pr->inherited_protocols.reserve(inh);
-            for (uint32_t k = 0; k < inh; ++k) pr->inherited_protocols.push_back(ReadString(in));
-
-            c.protocols.push_back(std::move(pr));
+            c.global_constant_pool = std::move(legacy_constants);
         }
-    }
 
-    if (h.verMinor >= 1)
-    {
+        if (c.method_bodies.empty())
+        {
+            MethodBody body{};
+            body.bytecode = std::move(legacy_code);
+            body.line_info = std::move(legacy_lines);
+            c.method_bodies.push_back(std::move(body));
+        }
+    } else {
         c.manifest.name = ReadString(in);
         c.manifest.version_major = ReadPOD<uint16_t>(in);
         c.manifest.version_minor = ReadPOD<uint16_t>(in);
+
+        {
+            uint32_t n = ReadPOD<uint32_t>(in);
+            c.string_table.reserve(n);
+            for (uint32_t i = 0; i < n; ++i) {
+                c.string_table.push_back(ReadString(in));
+            }
+        }
 
         {
             uint32_t n = ReadPOD<uint32_t>(in);
@@ -728,10 +800,8 @@ Assembly Assembly::deserialize(std::istream& in)
                 t.method_list.count = ReadPOD<uint32_t>(in);
                 t.field_list.start = ReadPOD<uint32_t>(in);
                 t.field_list.count = ReadPOD<uint32_t>(in);
-                if (h.verMinor >= 2) {
-                    t.property_list.start = ReadPOD<uint32_t>(in);
-                    t.property_list.count = ReadPOD<uint32_t>(in);
-                }
+                t.property_list.start = ReadPOD<uint32_t>(in);
+                t.property_list.count = ReadPOD<uint32_t>(in);
                 t.interfaces = ReadVectorPOD<type_idx>(in);
                 c.type_definitions.push_back(std::move(t));
             }
@@ -803,17 +873,103 @@ Assembly Assembly::deserialize(std::istream& in)
             }
         }
 
-        if (c.global_constant_pool.empty())
         {
-            c.global_constant_pool = c.constants;
+            uint32_t n = ReadPOD<uint32_t>(in);
+            c.function_prototypes.reserve(n);
+
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                FunctionPrototype fn{};
+                fn.name = ReadString(in);
+
+                uint32_t pn = ReadPOD<uint32_t>(in);
+                fn.params.reserve(pn);
+                for (uint32_t k = 0; k < pn; ++k) fn.params.push_back(ReadString(in));
+
+                uint32_t ln = ReadPOD<uint32_t>(in);
+                fn.param_labels.reserve(ln);
+                for (uint32_t k = 0; k < ln; ++k) fn.param_labels.push_back(ReadString(in));
+
+                uint32_t dn = ReadPOD<uint32_t>(in);
+                fn.param_defaults.resize(dn);
+                for (uint32_t k = 0; k < dn; ++k)
+                {
+                    auto& d = fn.param_defaults[k];
+                    d.has_default = ReadPOD<uint8_t>(in) != 0;
+                    if (d.has_default)
+                    {
+                        d.value = Value::deserialize(in);
+
+                        bool hasStr = ReadPOD<uint8_t>(in) != 0;
+                        if (hasStr) d.string_value = ReadString(in);
+                    }
+                }
+
+                uint32_t uvn = ReadPOD<uint32_t>(in);
+                fn.upvalues.reserve(uvn);
+                for (uint32_t k = 0; k < uvn; ++k)
+                {
+                    UpvalueInfo u{};
+                    u.index = ReadPOD<uint16_t>(in);
+                    u.is_local = ReadPOD<uint8_t>(in) != 0;
+                    fn.upvalues.push_back(u);
+                }
+
+                fn.is_initializer = ReadPOD<uint8_t>(in) != 0;
+                fn.is_override = ReadPOD<uint8_t>(in) != 0;
+
+                bool hasAssembly = ReadPOD<uint8_t>(in) != 0;
+                if (hasAssembly)
+                {
+                    fn.chunk = std::make_shared<Assembly>(Assembly::deserialize(in));
+                }
+
+                c.function_prototypes.push_back(std::move(fn));
+            }
         }
 
-        if (c.method_bodies.empty())
         {
-            MethodBody body{};
-            body.bytecode = c.code;
-            body.line_info = c.lines;
-            c.method_bodies.push_back(std::move(body));
+            uint32_t n = ReadPOD<uint32_t>(in);
+            c.protocol_definitions.reserve(n);
+
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                bool has = ReadPOD<uint8_t>(in) != 0;
+                if (!has) { c.protocol_definitions.push_back(nullptr); continue; }
+
+                auto pr = std::make_shared<Protocol>();
+                pr->name = ReadString(in);
+
+                uint32_t mn = ReadPOD<uint32_t>(in);
+                pr->method_requirements.reserve(mn);
+                for (uint32_t k = 0; k < mn; ++k)
+                {
+                    ProtocolMethodReq m{};
+                    m.name = ReadString(in);
+                    uint32_t pnn = ReadPOD<uint32_t>(in);
+                    m.param_names.reserve(pnn);
+                    for (uint32_t j = 0; j < pnn; ++j) m.param_names.push_back(ReadString(in));
+                    m.is_mutating = ReadPOD<uint8_t>(in) != 0;
+                    pr->method_requirements.push_back(std::move(m));
+                }
+
+                uint32_t pn = ReadPOD<uint32_t>(in);
+                pr->property_requirements.reserve(pn);
+                for (uint32_t k = 0; k < pn; ++k)
+                {
+                    ProtocolPropertyReq p{};
+                    p.name = ReadString(in);
+                    p.has_getter = ReadPOD<uint8_t>(in) != 0;
+                    p.has_setter = ReadPOD<uint8_t>(in) != 0;
+                    pr->property_requirements.push_back(std::move(p));
+                }
+
+                uint32_t inh = ReadPOD<uint32_t>(in);
+                pr->inherited_protocols.reserve(inh);
+                for (uint32_t k = 0; k < inh; ++k) pr->inherited_protocols.push_back(ReadString(in));
+
+                c.protocol_definitions.push_back(std::move(pr));
+            }
         }
     }
 
@@ -825,15 +981,8 @@ void Assembly::expand_to_assembly() {
         manifest.name = "Main";
     }
 
-    if (global_constant_pool.empty() && !constants.empty()) {
-        global_constant_pool = constants;
-    }
-
     if (method_bodies.empty()) {
-        MethodBody body{};
-        body.bytecode = code;
-        body.line_info = lines;
-        method_bodies.push_back(std::move(body));
+        method_bodies.emplace_back();
     }
 
     if (method_definitions.empty()) {

@@ -254,10 +254,13 @@ size_t FunctionObject::memory_size() const {
     total += param_defaults.capacity() * sizeof(Value);
     total += param_has_default.capacity() * sizeof(bool);
     if (chunk) {
-        total += chunk->code.capacity() * sizeof(uint8_t);
-        total += chunk->constants.capacity() * sizeof(Value);
-        total += chunk->strings.capacity() * sizeof(std::string);
-        total += chunk->functions.capacity() * sizeof(FunctionPrototype);
+        total += chunk->global_constant_pool.capacity() * sizeof(Value);
+        total += chunk->string_table.capacity() * sizeof(std::string);
+        total += chunk->function_prototypes.capacity() * sizeof(FunctionPrototype);
+        for (const auto& body : chunk->method_bodies) {
+            total += body.bytecode.capacity() * sizeof(uint8_t);
+            total += body.line_info.capacity() * sizeof(uint32_t);
+        }
     }
     return total;
 }
