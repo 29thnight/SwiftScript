@@ -457,7 +457,7 @@ namespace swiftscript {
         if (!chunk_) {
             throw std::runtime_error("No active chunk.");
         }
-        return chunk_->code;
+        throw std::runtime_error("No method body available.");
     }
 
     body_idx VM::entry_body_index(const Assembly& chunk) const {
@@ -497,9 +497,7 @@ namespace swiftscript {
 
     Value VM::read_constant() {
         uint16_t idx = read_short();
-        const auto& pool = chunk_->global_constant_pool.empty()
-            ? chunk_->constants
-            : chunk_->global_constant_pool;
+        const auto& pool = chunk_->global_constant_pool;
         if (idx >= pool.size()) {
             throw std::runtime_error("Constant index out of range.");
         }
@@ -508,10 +506,10 @@ namespace swiftscript {
 
     const std::string& VM::read_string() {
         uint16_t idx = read_short();
-        if (idx >= chunk_->strings.size()) {
+        if (idx >= chunk_->string_table.size()) {
             throw std::runtime_error("String constant index out of range.");
         }
-        return chunk_->strings[idx];
+        return chunk_->string_table[idx];
     }
 
     uint32_t VM::read_signature_param_count(signature_idx offset) const {
@@ -550,10 +548,10 @@ namespace swiftscript {
             return nullptr;
         }
         for (const auto& method : chunk_->method_definitions) {
-            if (method.name >= chunk_->strings.size()) {
+            if (method.name >= chunk_->string_table.size()) {
                 continue;
             }
-            if (chunk_->strings[method.name] != name) {
+            if (chunk_->string_table[method.name] != name) {
                 continue;
             }
             bool method_static = (method.flags & static_cast<uint32_t>(MethodFlags::Static)) != 0;
@@ -584,10 +582,10 @@ namespace swiftscript {
         }
         for (size_t i = start; i < end; ++i) {
             const auto& method = chunk_->method_definitions[i];
-            if (method.name >= chunk_->strings.size()) {
+            if (method.name >= chunk_->string_table.size()) {
                 continue;
             }
-            if (chunk_->strings[method.name] != name) {
+            if (chunk_->string_table[method.name] != name) {
                 continue;
             }
             bool method_static = (method.flags & static_cast<uint32_t>(MethodFlags::Static)) != 0;
@@ -614,10 +612,10 @@ namespace swiftscript {
         }
         for (size_t i = start; i < end; ++i) {
             const auto& prop = chunk_->property_definitions[i];
-            if (prop.name >= chunk_->strings.size()) {
+            if (prop.name >= chunk_->string_table.size()) {
                 continue;
             }
-            if (chunk_->strings[prop.name] != name) {
+            if (chunk_->string_table[prop.name] != name) {
                 continue;
             }
             bool prop_static = (prop.flags & static_cast<uint32_t>(PropertyFlags::Static)) != 0;
@@ -642,10 +640,10 @@ namespace swiftscript {
         }
         for (size_t i = start; i < end; ++i) {
             const auto& field = chunk_->field_definitions[i];
-            if (field.name >= chunk_->strings.size()) {
+            if (field.name >= chunk_->string_table.size()) {
                 continue;
             }
-            if (chunk_->strings[field.name] != name) {
+            if (chunk_->string_table[field.name] != name) {
                 continue;
             }
             bool field_static = (field.flags & static_cast<uint32_t>(FieldFlags::Static)) != 0;
@@ -683,8 +681,8 @@ namespace swiftscript {
             method_def.body_ptr >= chunk_->method_bodies.size()) {
             throw std::runtime_error("Method body not found.");
         }
-        std::string method_name = (method_def.name < chunk_->strings.size())
-            ? chunk_->strings[method_def.name]
+        std::string method_name = (method_def.name < chunk_->string_table.size())
+            ? chunk_->string_table[method_def.name]
             : std::string("method");
         call_frames_.emplace_back(
             callee_index + 1,
@@ -719,7 +717,7 @@ namespace swiftscript {
             return nullptr;
         }
         for (const auto& def : chunk_->type_definitions) {
-            if (def.name < chunk_->strings.size() && chunk_->strings[def.name] == name) {
+            if (def.name < chunk_->string_table.size() && chunk_->string_table[def.name] == name) {
                 return &def;
             }
         }

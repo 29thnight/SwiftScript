@@ -40,10 +40,10 @@ namespace swiftscript {
     struct OpCodeHandler<OpCode::OP_FUNCTION> {
         static void execute(VM& vm) {
             uint16_t index = vm.read_short();
-            if (index >= vm.chunk_->functions.size()) {
+            if (index >= vm.chunk_->function_prototypes.size()) {
                 throw std::runtime_error("Function index out of range.");
             }
-            const auto& proto = vm.chunk_->functions[index];
+            const auto& proto = vm.chunk_->function_prototypes[index];
             std::vector<Value> defaults;
             std::vector<bool> has_defaults;
             vm.build_param_defaults(proto, defaults, has_defaults);
@@ -557,11 +557,11 @@ namespace swiftscript {
     struct OpCodeHandler<OpCode::OP_CLOSURE> {
         static void execute(VM& vm) {
             uint16_t index = vm.read_short();
-            if (index >= vm.chunk_->functions.size()) {
+            if (index >= vm.chunk_->function_prototypes.size()) {
                 throw std::runtime_error("Function index out of range.");
             }
 
-            const auto& proto = vm.chunk_->functions[index];
+            const auto& proto = vm.chunk_->function_prototypes[index];
             std::vector<Value> defaults;
             std::vector<bool> has_defaults;
             vm.build_param_defaults(proto, defaults, has_defaults);
@@ -657,10 +657,10 @@ namespace swiftscript {
     OPCODE(OpCode::OP_CLASS) {
         OP_BODY {
             uint16_t name_idx = vm.read_short();
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Class name index out of range.");
             }
-            const std::string& name = vm.chunk_->strings[name_idx];
+            const std::string& name = vm.chunk_->string_table[name_idx];
             auto* klass = vm.allocate_object<ClassObject>(name);
             vm.push(Value::from_object(klass));
         }
@@ -680,12 +680,12 @@ namespace swiftscript {
             if (!type_val.is_object() || !type_val.as_object()) {
                 throw std::runtime_error("OP_METHOD expects class or enum on stack.");
             }
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Method name index out of range.");
             }
 
             Object* type_obj = type_val.as_object();
-            const std::string& name = vm.chunk_->strings[name_idx];
+            const std::string& name = vm.chunk_->string_table[name_idx];
 
             // Handle ClassObject
             if (type_obj->type == ObjectType::Class) {
@@ -794,11 +794,11 @@ namespace swiftscript {
             if (!type_val.is_object() || !type_val.as_object()) {
                 throw std::runtime_error("OP_DEFINE_PROPERTY expects class or struct on stack.");
             }
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Property name index out of range.");
             }
             Object* type_obj = type_val.as_object();
-            const std::string& prop_name = vm.chunk_->strings[name_idx];
+            const std::string& prop_name = vm.chunk_->string_table[name_idx];
 
             if (type_obj->type == ObjectType::Class) {
                 auto* klass = static_cast<ClassObject*>(type_obj);
@@ -837,11 +837,11 @@ namespace swiftscript {
     OPCODE(OpCode::OP_DEFINE_COMPUTED_PROPERTY)
     {
         static ClosureObject* make_closure_from_proto_index(VM & vm, uint16_t fn_idx) {
-            if (fn_idx >= vm.chunk_->functions.size()) {
+            if (fn_idx >= vm.chunk_->function_prototypes.size()) {
                 throw std::runtime_error("Function index out of range.");
             }
 
-            const auto& proto = vm.chunk_->functions[fn_idx];
+            const auto& proto = vm.chunk_->function_prototypes[fn_idx];
 
             std::vector<Value> defaults;
             std::vector<bool>  has_defaults;
@@ -875,15 +875,15 @@ namespace swiftscript {
             if (!type_val.is_object() || !type_val.as_object()) {
                 throw std::runtime_error("OP_DEFINE_COMPUTED_PROPERTY expects class/enum/struct on stack.");
             }
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Property name index out of range.");
             }
-            if (getter_idx >= vm.chunk_->functions.size()) {
+            if (getter_idx >= vm.chunk_->function_prototypes.size()) {
                 throw std::runtime_error("Getter function index out of range.");
             }
 
             Object* type_obj = type_val.as_object();
-            const std::string& prop_name = vm.chunk_->strings[name_idx];
+            const std::string& prop_name = vm.chunk_->string_table[name_idx];
 
             // Build getter once
             Value getter_val = Value::from_object(make_closure_from_proto_index(vm, getter_idx));
@@ -949,17 +949,17 @@ namespace swiftscript {
             if (!type_val.is_object() || !type_val.as_object()) {
                 throw std::runtime_error("OP_DEFINE_PROPERTY_WITH_OBSERVERS expects class or struct on stack.");
             }
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Property name index out of range.");
             }
 
             Object* type_obj = type_val.as_object();
-            const std::string& prop_name = vm.chunk_->strings[name_idx];
+            const std::string& prop_name = vm.chunk_->string_table[name_idx];
 
             // Create willSet observer closure if present
             Value will_set_observer = Value::null();
-            if (will_set_idx != 0xFFFF && will_set_idx < vm.chunk_->functions.size()) {
-                const auto& will_set_proto = vm.chunk_->functions[will_set_idx];
+            if (will_set_idx != 0xFFFF && will_set_idx < vm.chunk_->function_prototypes.size()) {
+                const auto& will_set_proto = vm.chunk_->function_prototypes[will_set_idx];
                 std::vector<Value> will_set_defaults;
                 std::vector<bool> will_set_has_defaults;
                 vm.build_param_defaults(will_set_proto, will_set_defaults, will_set_has_defaults);
@@ -979,8 +979,8 @@ namespace swiftscript {
 
             // Create didSet observer closure if present
             Value did_set_observer = Value::null();
-            if (did_set_idx != 0xFFFF && did_set_idx < vm.chunk_->functions.size()) {
-                const auto& did_set_proto = vm.chunk_->functions[did_set_idx];
+            if (did_set_idx != 0xFFFF && did_set_idx < vm.chunk_->function_prototypes.size()) {
+                const auto& did_set_proto = vm.chunk_->function_prototypes[did_set_idx];
                 std::vector<Value> did_set_defaults;
                 std::vector<bool> did_set_has_defaults;
                 vm.build_param_defaults(did_set_proto, did_set_defaults, did_set_has_defaults);
@@ -1217,8 +1217,8 @@ namespace swiftscript {
                     tuple->labels.push_back(std::nullopt);
                 }
                 else {
-                    if (label_idx < vm.chunk_->strings.size()) {
-                        tuple->labels.push_back(vm.chunk_->strings[label_idx]);
+                    if (label_idx < vm.chunk_->string_table.size()) {
+                        tuple->labels.push_back(vm.chunk_->string_table[label_idx]);
                     }
                     else {
                         tuple->labels.push_back(std::nullopt);
@@ -1257,10 +1257,10 @@ namespace swiftscript {
                 throw std::runtime_error("Tuple label access on non-tuple.");
             }
             auto* tuple = static_cast<TupleObject*>(tuple_val.as_object());
-            if (label_idx >= vm.chunk_->strings.size()) {
+            if (label_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Tuple label index out of range.");
             }
-            const std::string& label = vm.chunk_->strings[label_idx];
+            const std::string& label = vm.chunk_->string_table[label_idx];
             Value result = tuple->get(label);
             if (result.is_null()) {
                 throw std::runtime_error("Tuple has no element with label: " + label);
@@ -1274,10 +1274,10 @@ namespace swiftscript {
         OP_BODY
         {
             uint16_t name_idx = vm.read_short();
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Struct name index out of range.");
             }
-            const std::string& name = vm.chunk_->strings[name_idx];
+            const std::string& name = vm.chunk_->string_table[name_idx];
             auto* struct_type = vm.allocate_object<StructObject>(name);
             vm.push(Value::from_object(struct_type));
         }
@@ -1299,11 +1299,11 @@ namespace swiftscript {
                 struct_val.as_object()->type != ObjectType::Struct) {
                 throw std::runtime_error("OP_STRUCT_METHOD expects struct on stack.");
             }
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Method name index out of range.");
             }
             auto* struct_type = static_cast<StructObject*>(struct_val.as_object());
-            const std::string& name = vm.chunk_->strings[name_idx];
+            const std::string& name = vm.chunk_->string_table[name_idx];
             struct_type->methods[name] = method_val;
             struct_type->mutating_methods[name] = (is_mutating != 0);
         }
@@ -1334,10 +1334,10 @@ namespace swiftscript {
         {
             // Create an enum type object (similar to OP_CLASS and OP_STRUCT)
             uint16_t name_idx = vm.read_short();
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Enum name index out of range.");
             }
-            const std::string& name = vm.chunk_->strings[name_idx];
+            const std::string& name = vm.chunk_->string_table[name_idx];
             auto* enum_type = vm.allocate_object<EnumObject>(name);
             vm.push(Value::from_object(enum_type));
         }
@@ -1363,12 +1363,12 @@ namespace swiftscript {
                 enum_val.as_object()->type != ObjectType::Enum) {
                 throw std::runtime_error("OP_ENUM_CASE expects enum on stack.");
             }
-            if (case_name_idx >= vm.chunk_->strings.size()) {
+            if (case_name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Enum case name index out of range.");
             }
 
             auto* enum_type = static_cast<EnumObject*>(enum_val.as_object());
-            const std::string& case_name = vm.chunk_->strings[case_name_idx];
+            const std::string& case_name = vm.chunk_->string_table[case_name_idx];
 
             // Create enum case instance
             auto* case_obj = vm.allocate_object<EnumCaseObject>(enum_type, case_name);
@@ -1379,8 +1379,8 @@ namespace swiftscript {
                 if (label_idx == std::numeric_limits<uint16_t>::max()) {
                     case_obj->associated_labels.emplace_back("");
                 }
-                else if (label_idx < vm.chunk_->strings.size()) {
-                    case_obj->associated_labels.emplace_back(vm.chunk_->strings[label_idx]);
+                else if (label_idx < vm.chunk_->string_table.size()) {
+                    case_obj->associated_labels.emplace_back(vm.chunk_->string_table[label_idx]);
                 }
                 else {
                     throw std::runtime_error("Associated value label index out of range.");
@@ -1432,11 +1432,11 @@ namespace swiftscript {
         {
             // Create protocol object
             uint16_t protocol_idx = vm.read_short();
-            if (protocol_idx >= vm.chunk_->protocols.size()) {
+            if (protocol_idx >= vm.chunk_->protocol_definitions.size()) {
                 throw std::runtime_error("Protocol index out of range.");
             }
 
-            auto protocol = vm.chunk_->protocols[protocol_idx];
+            auto protocol = vm.chunk_->protocol_definitions[protocol_idx];
             auto* protocol_obj = vm.allocate_object<ProtocolObject>(protocol->name);
 
             // Store protocol requirements for runtime validation
@@ -1457,10 +1457,10 @@ namespace swiftscript {
         {
             // Define a global variable with the value on top of stack
             uint16_t name_idx = vm.read_short();
-            if (name_idx >= vm.chunk_->strings.size()) {
+            if (name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Global name index out of range.");
             }
-            const std::string& name = vm.chunk_->strings[name_idx];
+            const std::string& name = vm.chunk_->string_table[name_idx];
             vm.globals_[name] = vm.peek(0);
             vm.pop();
         }
@@ -1472,10 +1472,10 @@ namespace swiftscript {
         {
             // is operator: value is Type
             uint16_t type_name_idx = vm.read_short();
-            if (type_name_idx >= vm.chunk_->strings.size()) {
+            if (type_name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Type name index out of range.");
             }
-            const std::string& type_name = vm.chunk_->strings[type_name_idx];
+            const std::string& type_name = vm.chunk_->string_table[type_name_idx];
             Value value = vm.pop();
 
             vm.push(Value::from_bool(vm.matches_type(value, type_name)));
@@ -1488,10 +1488,10 @@ namespace swiftscript {
         {
             // as operator: basic cast (for now, just verify type matches)
             uint16_t type_name_idx = vm.read_short();
-            if (type_name_idx >= vm.chunk_->strings.size()) {
+            if (type_name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Type name index out of range.");
             }
-            const std::string& type_name = vm.chunk_->strings[type_name_idx];
+            const std::string& type_name = vm.chunk_->string_table[type_name_idx];
             Value value = vm.peek(0);  // Keep value on stack
 
             // For now, basic cast just passes through
@@ -1505,10 +1505,10 @@ namespace swiftscript {
         {
             // as? operator: optional cast (returns nil if fails)
             uint16_t type_name_idx = vm.read_short();
-            if (type_name_idx >= vm.chunk_->strings.size()) {
+            if (type_name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Type name index out of range.");
             }
-            const std::string& type_name = vm.chunk_->strings[type_name_idx];
+            const std::string& type_name = vm.chunk_->string_table[type_name_idx];
             Value value = vm.pop();
 
             bool is_valid = vm.matches_type(value, type_name);
@@ -1528,10 +1528,10 @@ namespace swiftscript {
         {
             // as! operator: forced cast (throws if fails)
             uint16_t type_name_idx = vm.read_short();
-            if (type_name_idx >= vm.chunk_->strings.size()) {
+            if (type_name_idx >= vm.chunk_->string_table.size()) {
                 throw std::runtime_error("Type name index out of range.");
             }
-            const std::string& type_name = vm.chunk_->strings[type_name_idx];
+            const std::string& type_name = vm.chunk_->string_table[type_name_idx];
             Value value = vm.peek(0);
 
             bool is_valid = vm.matches_type(value, type_name);

@@ -146,15 +146,11 @@ struct Assembly {
     std::vector<FieldDef> field_definitions;
     std::vector<PropertyDef> property_definitions;
     std::vector<Value> global_constant_pool;
+    std::vector<std::string> string_table;
     std::vector<uint8_t> signature_blob;
     std::vector<MethodBody> method_bodies;
-
-    std::vector<uint8_t> code;
-    std::vector<uint32_t> lines;
-    std::vector<Value> constants;
-    std::vector<std::string> strings;
-    std::vector<FunctionPrototype> functions;
-    std::vector<std::shared_ptr<Protocol>> protocols;
+    std::vector<FunctionPrototype> function_prototypes;
+    std::vector<std::shared_ptr<Protocol>> protocol_definitions;
 
     void write(uint8_t byte, uint32_t line);
     void write_op(OpCode op, uint32_t line);
@@ -273,6 +269,6 @@ namespace swiftscript {
 
         constexpr uint32_t kMagicSSAS = 0x53415353; // 'SSAS' little-endian
         constexpr uint16_t kVerMajor = 1;
-        constexpr uint16_t kVerMinor = 2;
+        constexpr uint16_t kVerMinor = 3;
     }
 }
