@@ -299,11 +299,255 @@ size_t Chunk::property_instruction(const char* name, size_t offset) const {
 
 void Chunk::serialize(std::ostream& out) const
 {
+    // Header
+    ChunkFileHeader h{};
+    h.magic = kMagicSSCH;
+    h.verMajor = kVerMajor;
+    h.verMinor = kVerMinor;
+    WritePOD(out, h);
+
+    // code / lines
+    WriteVectorPOD(out, code);
+    WriteVectorPOD(out, lines);
+
+    // constants
+    {
+        uint32_t n = (uint32_t)constants.size();
+        WritePOD(out, n);
+        for (const Value& v : constants)
+        {
+            // ===== 반드시 구현 필요 =====
+            // Value가 스스로 직렬화/역직렬화를 제공하도록
+            v.serialize(out);
+        }
+    }
+
+    // strings
+    {
+        uint32_t n = (uint32_t)strings.size();
+        WritePOD(out, n);
+        for (const auto& s : strings) WriteString(out, s);
+    }
+
+    // functions
+    {
+        uint32_t n = (uint32_t)functions.size();
+        WritePOD(out, n);
+
+        for (const auto& fn : functions)
+        {
+            WriteString(out, fn.name);
+
+            // params / labels
+            WritePOD(out, (uint32_t)fn.params.size());
+            for (auto& p : fn.params) WriteString(out, p);
+
+            WritePOD(out, (uint32_t)fn.param_labels.size());
+            for (auto& p : fn.param_labels) WriteString(out, p);
+
+            // defaults
+            WritePOD(out, (uint32_t)fn.param_defaults.size());
+            for (auto& d : fn.param_defaults)
+            {
+                WritePOD(out, (uint8_t)(d.has_default ? 1 : 0));
+                if (d.has_default)
+                {
+                    d.value.serialize(out);
+
+                    WritePOD(out, (uint8_t)(d.string_value.has_value() ? 1 : 0));
+                    if (d.string_value) WriteString(out, *d.string_value);
+                }
+            }
+
+            // upvalues
+            WritePOD(out, (uint32_t)fn.upvalues.size());
+            for (auto& u : fn.upvalues)
+            {
+                WritePOD(out, u.index);
+                WritePOD(out, (uint8_t)(u.is_local ? 1 : 0));
+            }
+
+            WritePOD(out, (uint8_t)(fn.is_initializer ? 1 : 0));
+            WritePOD(out, (uint8_t)(fn.is_override ? 1 : 0));
+
+            // nested chunk
+            WritePOD(out, (uint8_t)(fn.chunk ? 1 : 0));
+            if (fn.chunk) fn.chunk->serialize(out);
+        }
+    }
+
+    // protocols
+    {
+        uint32_t n = (uint32_t)protocols.size();
+        WritePOD(out, n);
+
+        for (const auto& pr : protocols)
+        {
+            WritePOD(out, (uint8_t)(pr ? 1 : 0));
+            if (!pr) continue;
+
+            WriteString(out, pr->name);
+
+            // method req
+            WritePOD(out, (uint32_t)pr->method_requirements.size());
+            for (auto& m : pr->method_requirements)
+            {
+                WriteString(out, m.name);
+                WritePOD(out, (uint32_t)m.param_names.size());
+                for (auto& pn : m.param_names) WriteString(out, pn);
+                WritePOD(out, (uint8_t)(m.is_mutating ? 1 : 0));
+            }
+
+            // property req
+            WritePOD(out, (uint32_t)pr->property_requirements.size());
+            for (auto& p : pr->property_requirements)
+            {
+                WriteString(out, p.name);
+                WritePOD(out, (uint8_t)(p.has_getter ? 1 : 0));
+                WritePOD(out, (uint8_t)(p.has_setter ? 1 : 0));
+            }
+
+            // inherited
+            WritePOD(out, (uint32_t)pr->inherited_protocols.size());
+            for (auto& ip : pr->inherited_protocols) WriteString(out, ip);
+        }
+    }
 }
 
 Chunk Chunk::deserialize(std::istream& in)
 {
-    return Chunk();
+    // Header validate
+    auto h = ReadPOD<ChunkFileHeader>(in);
+    if (h.magic != kMagicSSCH)
+        throw std::runtime_error("Chunk::deserialize bad magic");
+    if (h.verMajor != kVerMajor)
+        throw std::runtime_error("Chunk::deserialize version mismatch");
+
+    Chunk c{};
+    c.code = ReadVectorPOD<uint8_t>(in);
+    c.lines = ReadVectorPOD<uint32_t>(in);
+
+    // constants
+    {
+        uint32_t n = ReadPOD<uint32_t>(in);
+        c.constants.reserve(n);
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            // ===== 반드시 구현 필요 =====
+            c.constants.push_back(Value::deserialize(in));
+        }
+    }
+
+    // strings
+    {
+        uint32_t n = ReadPOD<uint32_t>(in);
+        c.strings.reserve(n);
+        for (uint32_t i = 0; i < n; ++i) c.strings.push_back(ReadString(in));
+    }
+
+    // functions
+    {
+        uint32_t n = ReadPOD<uint32_t>(in);
+        c.functions.reserve(n);
+
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            FunctionPrototype fn{};
+            fn.name = ReadString(in);
+
+            uint32_t pn = ReadPOD<uint32_t>(in);
+            fn.params.reserve(pn);
+            for (uint32_t k = 0; k < pn; ++k) fn.params.push_back(ReadString(in));
+
+            uint32_t ln = ReadPOD<uint32_t>(in);
+            fn.param_labels.reserve(ln);
+            for (uint32_t k = 0; k < ln; ++k) fn.param_labels.push_back(ReadString(in));
+
+            uint32_t dn = ReadPOD<uint32_t>(in);
+            fn.param_defaults.resize(dn);
+            for (uint32_t k = 0; k < dn; ++k)
+            {
+                auto& d = fn.param_defaults[k];
+                d.has_default = ReadPOD<uint8_t>(in) != 0;
+                if (d.has_default)
+                {
+                    d.value = Value::deserialize(in);
+
+                    bool hasStr = ReadPOD<uint8_t>(in) != 0;
+                    if (hasStr) d.string_value = ReadString(in);
+                }
+            }
+
+            uint32_t uvn = ReadPOD<uint32_t>(in);
+            fn.upvalues.reserve(uvn);
+            for (uint32_t k = 0; k < uvn; ++k)
+            {
+                UpvalueInfo u{};
+                u.index = ReadPOD<uint16_t>(in);
+                u.is_local = ReadPOD<uint8_t>(in) != 0;
+                fn.upvalues.push_back(u);
+            }
+
+            fn.is_initializer = ReadPOD<uint8_t>(in) != 0;
+            fn.is_override = ReadPOD<uint8_t>(in) != 0;
+
+            bool hasChunk = ReadPOD<uint8_t>(in) != 0;
+            if (hasChunk)
+            {
+                fn.chunk = std::make_shared<Chunk>(Chunk::deserialize(in));
+            }
+
+            c.functions.push_back(std::move(fn));
+        }
+    }
+
+    // protocols
+    {
+        uint32_t n = ReadPOD<uint32_t>(in);
+        c.protocols.reserve(n);
+
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            bool has = ReadPOD<uint8_t>(in) != 0;
+            if (!has) { c.protocols.push_back(nullptr); continue; }
+
+            auto pr = std::make_shared<Protocol>();
+            pr->name = ReadString(in);
+
+            uint32_t mn = ReadPOD<uint32_t>(in);
+            pr->method_requirements.reserve(mn);
+            for (uint32_t k = 0; k < mn; ++k)
+            {
+                ProtocolMethodReq m{};
+                m.name = ReadString(in);
+                uint32_t pnn = ReadPOD<uint32_t>(in);
+                m.param_names.reserve(pnn);
+                for (uint32_t j = 0; j < pnn; ++j) m.param_names.push_back(ReadString(in));
+                m.is_mutating = ReadPOD<uint8_t>(in) != 0;
+                pr->method_requirements.push_back(std::move(m));
+            }
+
+            uint32_t pn = ReadPOD<uint32_t>(in);
+            pr->property_requirements.reserve(pn);
+            for (uint32_t k = 0; k < pn; ++k)
+            {
+                ProtocolPropertyReq p{};
+                p.name = ReadString(in);
+                p.has_getter = ReadPOD<uint8_t>(in) != 0;
+                p.has_setter = ReadPOD<uint8_t>(in) != 0;
+                pr->property_requirements.push_back(std::move(p));
+            }
+
+            uint32_t inh = ReadPOD<uint32_t>(in);
+            pr->inherited_protocols.reserve(inh);
+            for (uint32_t k = 0; k < inh; ++k) pr->inherited_protocols.push_back(ReadString(in));
+
+            c.protocols.push_back(std::move(pr));
+        }
+    }
+
+    return c;
 }
+
 
 } // namespace swiftscript

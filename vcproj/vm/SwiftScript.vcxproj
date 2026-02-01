@@ -105,9 +105,10 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src\VM\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>Default</LanguageStandard_C>
       <PrecompiledHeaderFile>pch_.h</PrecompiledHeaderFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -123,9 +124,10 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src\VM\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>Default</LanguageStandard_C>
       <PrecompiledHeaderFile>pch_.h</PrecompiledHeaderFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -134,30 +136,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\vm\pch_.h" />
-    <ClInclude Include="..\..\test\test_all_tests.hpp" />
-    <ClInclude Include="..\..\test\test_helpers.hpp" />
-    <ClInclude Include="..\..\test\test_property_observers_impl.hpp" />
     <ClInclude Include="test\QUICK_REFERENCE.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\vm\pch_.cpp" />
-    <ClCompile Include="..\..\test\test_access_control.cpp" />
-    <ClCompile Include="..\..\test\test_class.cpp" />
-    <ClCompile Include="..\..\test\test_closure.cpp" />
-    <ClCompile Include="..\..\test\test_enum.cpp" />
-    <ClCompile Include="..\..\test\test_extension.cpp" />
-    <ClCompile Include="..\..\test\test_gtest.cpp" />
-    <ClCompile Include="..\..\test\test_helpers_example.cpp" />
-    <ClCompile Include="..\..\test\test_import.cpp" />
-    <ClCompile Include="..\..\test\test_let.cpp" />
-    <ClCompile Include="..\..\test\test_new_features.cpp" />
-    <ClCompile Include="..\..\test\test_optional.cpp" />
-    <ClCompile Include="..\..\test\test_pattern_matching.cpp" />
-    <ClCompile Include="..\..\test\test_phase1.cpp" />
-    <ClCompile Include="..\..\test\test_project_runner.cpp" />
-    <ClCompile Include="..\..\test\test_protocol.cpp" />
-    <ClCompile Include="..\..\test\test_switch.cpp" />
-    <ClCompile Include="..\..\test\test_tuple.cpp" />
+    <ClCompile Include="vm_main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\enum-implementation-status.md" />
@@ -172,7 +155,7 @@
     <None Include="test\TEST_FRAMEWORK_README.md" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="SwiftScriptLib.vcxproj">
+    <ProjectReference Include="..\common\SwiftScriptLib.vcxproj">
       <Project>{36348904-e027-4dd8-a112-9b969c34e0d0}</Project>
     </ProjectReference>
   </ItemGroup>

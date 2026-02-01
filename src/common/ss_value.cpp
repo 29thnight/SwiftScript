@@ -14,6 +14,82 @@ bool nearly_equal(Float a, Float b) {
 }
 } // namespace
 
+void Value::serialize(std::ostream& out) const
+{
+    const uint8_t type = static_cast<uint8_t>(type_);
+    const uint8_t ref = static_cast<uint8_t>(ref_type_);
+
+    WritePOD(out, type);
+    WritePOD(out, ref);
+
+    switch (type_)
+    {
+    case Type::Null:
+    case Type::Undefined:
+        return;
+
+    case Type::Bool: {
+        const uint8_t b = data_.bool_val ? 1 : 0;
+        WritePOD(out, b);
+        return;
+    }
+
+    case Type::Int:
+        WritePOD(out, data_.int_val);
+        return;
+
+    case Type::Float:
+        WritePOD(out, data_.float_val);
+        return;
+
+    case Type::Object:
+        // Object* is a runtime address -> cannot be serialized safely
+        throw std::runtime_error("Value::serialize: Object type is not serializable in Chunk constants");
+    }
+
+    throw std::runtime_error("Value::serialize: unknown Value::Type");
+}
+
+Value Value::deserialize(std::istream& in)
+{
+    const uint8_t typeU8 = ReadPOD<uint8_t>(in);
+    const uint8_t refU8 = ReadPOD<uint8_t>(in);
+
+    const Type t = static_cast<Type>(typeU8);
+    const RefType ref = static_cast<RefType>(refU8);
+
+    switch (t)
+    {
+    case Type::Null:
+        return Value::null();
+
+    case Type::Undefined:
+        return Value::undefined();
+
+    case Type::Bool: {
+        const uint8_t b = ReadPOD<uint8_t>(in);
+        return Value::from_bool(b != 0);
+    }
+
+    case Type::Int: {
+        const Int v = ReadPOD<Int>(in);
+        return Value::from_int(v);
+    }
+
+    case Type::Float: {
+        const Float v = ReadPOD<Float>(in);
+        return Value::from_float(v);
+    }
+
+    case Type::Object:
+        // We wrote refType for forward-compat but still can't restore object graphs here.
+        (void)ref;
+        throw std::runtime_error("Value::deserialize: Object type is not supported in Chunk constants");
+    }
+
+    throw std::runtime_error("Value::deserialize: unknown Value::Type");
+}
+
 std::string Value::to_string() const {
     switch (type_) {
         case Type::Null:

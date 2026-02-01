@@ -36,6 +36,11 @@
     <ClInclude Include="server_include\ssproject_loader.hpp" />
     <ClInclude Include="server_include\stdafx.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="vcproj\common\SwiftScriptLib.vcxproj">
+      <Project>{36348904-e027-4dd8-a112-9b969c34e0d0}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>

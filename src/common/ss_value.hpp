@@ -40,6 +40,9 @@ private:
 public:
     // Constructors
     Value() : type_(Type::Null) {}
+
+    void serialize(std::ostream& out) const;
+    static Value deserialize(std::istream& in);
     
     static Value null() { return Value(); }
     static Value undefined() { 

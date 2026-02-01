@@ -34,71 +34,14 @@
       <Filter>Test%28Obsolute%29\docs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\vm\pch_.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\test\test_all_tests.hpp">
-      <Filter>Test%28Obsolute%29\internal\include</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\test\test_helpers.hpp">
-      <Filter>Test%28Obsolute%29\internal\include</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\test\test_property_observers_impl.hpp">
-      <Filter>Test%28Obsolute%29\internal\include</Filter>
+      <Filter>소스 파일</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\vm\pch_.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\test\test_access_control.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_class.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_closure.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_enum.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_extension.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_gtest.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_helpers_example.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_import.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_let.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_new_features.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_optional.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_pattern_matching.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_phase1.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_project_runner.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_protocol.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_switch.cpp">
-      <Filter>Test%28Obsolute%29\internal\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\test\test_tuple.cpp">
+    <ClCompile Include="vm_main.cpp">
       <Filter>Test%28Obsolute%29\internal\src</Filter>
     </ClCompile>
   </ItemGroup>

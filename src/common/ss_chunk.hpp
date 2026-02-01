@@ -87,3 +87,89 @@ struct Protocol {
     };
 
 } // namespace swiftscript
+
+
+namespace swiftscript {
+
+    namespace
+    {
+        // ---- IO helpers ----
+        template<class T>
+        void WritePOD(std::ostream& out, const T& v)
+        {
+            static_assert(std::is_trivially_copyable_v<T>);
+            out.write(reinterpret_cast<const char*>(&v), sizeof(T));
+            if (!out) throw std::runtime_error("Chunk::serialize write failed");
+        }
+
+        template<class T>
+        T ReadPOD(std::istream& in)
+        {
+            static_assert(std::is_trivially_copyable_v<T>);
+            T v{};
+            in.read(reinterpret_cast<char*>(&v), sizeof(T));
+            if (!in) throw std::runtime_error("Chunk::deserialize read failed");
+            return v;
+        }
+
+        void WriteBytes(std::ostream& out, const void* data, size_t size)
+        {
+            out.write(reinterpret_cast<const char*>(data), (std::streamsize)size);
+            if (!out) throw std::runtime_error("Chunk::serialize write bytes failed");
+        }
+
+        void ReadBytes(std::istream& in, void* data, size_t size)
+        {
+            in.read(reinterpret_cast<char*>(data), (std::streamsize)size);
+            if (!in) throw std::runtime_error("Chunk::deserialize read bytes failed");
+        }
+
+        void WriteString(std::ostream& out, const std::string& s)
+        {
+            uint32_t n = (uint32_t)s.size();
+            WritePOD(out, n);
+            if (n) WriteBytes(out, s.data(), n);
+        }
+
+        std::string ReadString(std::istream& in)
+        {
+            uint32_t n = ReadPOD<uint32_t>(in);
+            std::string s;
+            s.resize(n);
+            if (n) ReadBytes(in, s.data(), n);
+            return s;
+        }
+
+        template<class T>
+        void WriteVectorPOD(std::ostream& out, const std::vector<T>& v)
+        {
+            static_assert(std::is_trivially_copyable_v<T>);
+            uint32_t n = (uint32_t)v.size();
+            WritePOD(out, n);
+            if (n) WriteBytes(out, v.data(), sizeof(T) * (size_t)n);
+        }
+
+        template<class T>
+        std::vector<T> ReadVectorPOD(std::istream& in)
+        {
+            static_assert(std::is_trivially_copyable_v<T>);
+            uint32_t n = ReadPOD<uint32_t>(in);
+            std::vector<T> v;
+            v.resize(n);
+            if (n) ReadBytes(in, v.data(), sizeof(T) * (size_t)n);
+            return v;
+        }
+
+        // ---- file header ----
+        struct ChunkFileHeader
+        {
+            uint32_t magic;      // 'SSCH'
+            uint16_t verMajor;   // 1
+            uint16_t verMinor;   // 0
+        };
+
+        constexpr uint32_t kMagicSSCH = 0x48435353; // 'SSCH' little-endian
+        constexpr uint16_t kVerMajor = 1;
+        constexpr uint16_t kVerMinor = 0;
+    }
+}

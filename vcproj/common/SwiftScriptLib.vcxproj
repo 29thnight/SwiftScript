@@ -111,9 +111,9 @@
       <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>Create</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcproj\common\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -130,9 +130,9 @@
       <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>Create</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)include\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcproj\common\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -142,7 +142,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\common\framework.h" />
-    <ClInclude Include="..\..\src\common\pch.h" />
     <ClInclude Include="..\..\src\common\ss_ast.hpp" />
     <ClInclude Include="..\..\src\common\ss_chunk.hpp" />
     <ClInclude Include="..\..\src\common\ss_compiler.hpp" />
@@ -157,6 +156,7 @@
     <ClInclude Include="..\..\src\common\ss_type_checker.hpp" />
     <ClInclude Include="..\..\src\common\ss_value.hpp" />
     <ClInclude Include="..\..\src\common\ss_vm.hpp" />
+    <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\src\common\ss_opcodes.def" />
@@ -165,7 +165,6 @@
     <None Include="..\..\src\common\ss_vm_opcodes_basic.inl" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\common\pch.cpp" />
     <ClCompile Include="..\..\src\common\ss_ast_clone.cpp" />
     <ClCompile Include="..\..\src\common\ss_chunk.cpp" />
     <ClCompile Include="..\..\src\common\ss_compiler.cpp" />
@@ -178,6 +177,7 @@
     <ClCompile Include="..\..\src\common\ss_type_checker.cpp" />
     <ClCompile Include="..\..\src\common\ss_value.cpp" />
     <ClCompile Include="..\..\src\common\ss_vm.cpp" />
+    <ClCompile Include="pch.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
