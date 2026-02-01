@@ -15,48 +15,48 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="server_src\main.cpp">
+    <ClCompile Include="src\server\analyzer.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="server_src\lsp_connection.cpp">
+    <ClCompile Include="src\server\lsp_connection.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="server_src\ssproject_loader.cpp">
+    <ClCompile Include="src\server\lsp_server.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="server_src\module_resolver.cpp">
+    <ClCompile Include="src\server\main.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="server_src\analyzer.cpp">
+    <ClCompile Include="src\server\module_resolver.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="server_src\lsp_server.cpp">
+    <ClCompile Include="src\server\ssproject_loader.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="server_src\stdafx.cpp">
+    <ClCompile Include="src\server\stdafx.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="server_include\lsp_connection.hpp">
+    <ClInclude Include="src\server\analyzer.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="server_include\lsp_utils.hpp">
+    <ClInclude Include="src\server\lsp_server.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="server_include\ssproject_loader.hpp">
+    <ClInclude Include="src\server\lsp_utils.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="server_include\module_resolver.hpp">
+    <ClInclude Include="src\server\module_resolver.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="server_include\analyzer.hpp">
+    <ClInclude Include="src\server\ssproject_loader.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="server_include\lsp_server.hpp">
+    <ClInclude Include="src\server\stdafx.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="server_include\stdafx.h">
+    <ClInclude Include="src\server\lsp_connection.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

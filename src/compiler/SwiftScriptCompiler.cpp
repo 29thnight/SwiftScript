@@ -10,6 +10,7 @@ using namespace swiftscript;
 
 namespace COMPILE_CODE
 {
+	constexpr int SUCCESS = 0;
     constexpr int ERROR = 1;
 }
 
@@ -63,6 +64,7 @@ inline int CompileProject(const SSProject& proj, const std::string& buildType, c
     }
 
     std::cout << "Build (" << buildType << ") complete: " << outputFile << "\n";
+	return COMPILE_CODE::SUCCESS;
 }
 
 int main(int argc, char* argv[]) {
