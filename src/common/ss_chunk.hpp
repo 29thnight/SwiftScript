@@ -51,40 +51,40 @@ struct Protocol {
     std::vector<std::string> inherited_protocols;
 };
 
-    // Bytecode assembly
-    struct Assembly {
-        std::vector<uint8_t> code;
-        std::vector<uint32_t> lines;
-        std::vector<Value> constants;
-        std::vector<std::string> strings;
-        std::vector<FunctionPrototype> functions;
-        std::vector<std::shared_ptr<Protocol>> protocols;
+// Bytecode assembly
+struct Assembly {
+    std::vector<uint8_t> code;
+    std::vector<uint32_t> lines;
+    std::vector<Value> constants;
+    std::vector<std::string> strings;
+    std::vector<FunctionPrototype> functions;
+    std::vector<std::shared_ptr<Protocol>> protocols;
 
-        void write(uint8_t byte, uint32_t line);
-        void write_op(OpCode op, uint32_t line);
+    void write(uint8_t byte, uint32_t line);
+    void write_op(OpCode op, uint32_t line);
 
-        size_t add_constant(Value value);
-        size_t add_string(const std::string& str);
-        size_t add_function(FunctionPrototype proto);
-        size_t add_protocol(std::shared_ptr<Protocol> protocol);
+    size_t add_constant(Value value);
+    size_t add_string(const std::string& str);
+    size_t add_function(FunctionPrototype proto);
+    size_t add_protocol(std::shared_ptr<Protocol> protocol);
 
-        size_t emit_jump(OpCode op, uint32_t line);
-        void patch_jump(size_t offset);
+    size_t emit_jump(OpCode op, uint32_t line);
+    void patch_jump(size_t offset);
 
-        void disassemble(const std::string& name) const;
-        size_t disassemble_instruction(size_t offset) const;
+    void disassemble(const std::string& name) const;
+    size_t disassemble_instruction(size_t offset) const;
 
-		void serialize(std::ostream& out) const;
-		static Assembly deserialize(std::istream& in);
+	void serialize(std::ostream& out) const;
+	static Assembly deserialize(std::istream& in);
 
-    private:
-        size_t simple_instruction(const char* name, size_t offset) const;
-        size_t constant_instruction(const char* name, size_t offset) const;
-        size_t string_instruction(const char* name, size_t offset) const;
-        size_t short_instruction(const char* name, size_t offset) const;
-        size_t jump_instruction(const char* name, int sign, size_t offset) const;
-        size_t property_instruction(const char* name, size_t offset) const;
-    };
+private:
+    size_t simple_instruction(const char* name, size_t offset) const;
+    size_t constant_instruction(const char* name, size_t offset) const;
+    size_t string_instruction(const char* name, size_t offset) const;
+    size_t short_instruction(const char* name, size_t offset) const;
+    size_t jump_instruction(const char* name, int sign, size_t offset) const;
+    size_t property_instruction(const char* name, size_t offset) const;
+};
 
 } // namespace swiftscript
 
