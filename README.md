@@ -138,17 +138,6 @@ var dict = ["a": 1]
 dict["a"] = 2
 ```
 
-### 10) 에러 처리
-- `throw`, `try`, `catch`, `do-catch` 문법 지원【F:GRAMMAR_TODO.md†L31-L52】
-
-```swift
-do {
-    try risky()
-} catch {
-    print("error")
-}
-```
-
 ### 11) 제네릭
 - 제네릭 함수/구조체/열거형/확장
 - 제약(`T: Protocol`) 및 `where` 절
