@@ -106,21 +106,56 @@ void RC::release_children(VM* vm, Object* obj) {
             }
         }
     } else if (obj->type == ObjectType::BoundMethod) {
-        // BoundMethod owns receiver and method - release them
         auto* bound = static_cast<BoundMethodObject*>(obj);
-        if (bound->receiver && !bound->receiver->rc.is_dead) {
+        if (bound->receiver && deleted_set.find(bound->receiver) == deleted_set.end()) {
             RC::release(vm, bound->receiver);
         }
         if (bound->method.is_object() && bound->method.ref_type() == RefType::Strong) {
-            Object* method_obj = bound->method.as_object();
-            if (method_obj && !method_obj->rc.is_dead) {
-                RC::release(vm, method_obj);
+            Object* child = bound->method.as_object();
+            if (child && deleted_set.find(child) == deleted_set.end()) {
+                RC::release(vm, child);
             }
+        }
+    } else if (obj->type == ObjectType::BuiltinMethod) {
+        auto* method = static_cast<BuiltinMethodObject*>(obj);
+        if (method->target && deleted_set.find(method->target) == deleted_set.end()) {
+            RC::release(vm, method->target);
         }
     }
 }
 
-// ---- Strong release (IMMEDIATE DEALLOCATION) ----
+// ---- Strong retain ----
+void RC::retain(Object* obj) {
+    if (!obj) return;
+
+    bool had_creator_ref = obj->rc.has_creator_ref.exchange(false, std::memory_order_acq_rel);
+    if (had_creator_ref) {
+        int32_t count = obj->rc.strong_count.load(std::memory_order_acquire);
+        SS_DEBUG_RC("RETAIN %p [%s] rc: %d -> %d (adopt)",
+                    obj, object_type_name(obj->type), count, count);
+        return;
+    }
+
+    int32_t old_count = obj->rc.strong_count.fetch_add(1, std::memory_order_acq_rel);
+
+    SS_DEBUG_RC("RETAIN %p [%s] rc: %d -> %d",
+                obj, object_type_name(obj->type), old_count, old_count + 1);
+}
+
+void RC::adopt(Object* obj) {
+    if (!obj) return;
+
+    bool had_creator_ref = obj->rc.has_creator_ref.exchange(false, std::memory_order_acq_rel);
+    if (!had_creator_ref) {
+        return;
+    }
+
+    int32_t count = obj->rc.strong_count.load(std::memory_order_acquire);
+    SS_DEBUG_RC("ADOPT %p [%s] rc: %d -> %d",
+                obj, object_type_name(obj->type), count, count);
+}
+
+// ---- Strong release ----
 void RC::release(VM* vm, Object* obj) {
     if (!obj) return;
 
@@ -202,4 +237,13 @@ void RC::weak_release(Object* obj, Value* weak_slot) {
 
 } // namespace swiftscript
 
+        vm->remove_from_objects_list(obj);
+        vm->record_deallocation(*obj);
+        delete obj;
+    }
 
+    // If new objects were deferred during processing, they remain in
+    // deferred_releases_ and will be picked up on the next cleanup cycle.
+}
+
+} // namespace swiftscript
