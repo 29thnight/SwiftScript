@@ -27,7 +27,6 @@ namespace swiftscript {
     struct VMConfig {
         size_t initial_stack_size = 256;
         size_t max_stack_size = 65536;
-        size_t deferred_cleanup_threshold = 100;
         bool enable_debug = false;
     };
 
@@ -42,7 +41,6 @@ namespace swiftscript {
 
         // Object management
         Object* objects_head_{ nullptr };  // Linked list of all objects
-        std::vector<Object*> deferred_releases_;
 
         // Execution state
         std::vector<Value> stack_;
@@ -61,7 +59,6 @@ namespace swiftscript {
 
         // Counters
         uint32_t rc_operations_{ 0 };
-        bool is_collecting_{ false };
 
         void record_deallocation(const Object& obj);
 
@@ -76,9 +73,6 @@ namespace swiftscript {
         // Object lifecycle
         template<typename T, typename... Args>
         T* allocate_object(Args&&... args);
-
-        void add_deferred_release(Object* obj);
-        std::vector<Object*>& get_deferred_releases() { return deferred_releases_; }
 
         // Remove object from linked list (used when object is deallocated)
         void remove_from_objects_list(Object* obj);
@@ -100,8 +94,6 @@ namespace swiftscript {
         bool is_builtin_type_name(const std::string& name) const;
 
         // Execution control
-        void run_cleanup();
-        void collect_if_needed();
         void record_rc_operation();
         Value interpret(const std::string& source);
         Value execute(const Assembly& chunk);

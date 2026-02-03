@@ -138,6 +138,8 @@ size_t Assembly::disassemble_instruction(size_t offset) const {
             return simple_instruction("OP_FALSE", offset);
         case OpCode::OP_POP:
             return simple_instruction("OP_POP", offset);
+        case OpCode::OP_POP_N:
+            return short_instruction("OP_POP_N", offset);
         case OpCode::OP_ADD:
             return simple_instruction("OP_ADD", offset);
         case OpCode::OP_SUBTRACT:
@@ -176,6 +178,8 @@ size_t Assembly::disassemble_instruction(size_t offset) const {
             return short_instruction("OP_SET_GLOBAL", offset);
         case OpCode::OP_GET_LOCAL:
             return short_instruction("OP_GET_LOCAL", offset);
+        case OpCode::OP_GET_LOCAL_MOVE:
+            return short_instruction("OP_GET_LOCAL_MOVE", offset);
         case OpCode::OP_SET_LOCAL:
             return short_instruction("OP_SET_LOCAL", offset);
         case OpCode::OP_JUMP:

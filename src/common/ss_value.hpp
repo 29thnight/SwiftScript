@@ -551,16 +551,24 @@ public:
 
     BoundMethodObject(Object* recv, Value m, bool mutating = false)
         : Object(ObjectType::BoundMethod), receiver(recv), method(m), is_mutating(mutating) {
+        // Retain receiver - BoundMethod takes ownership
+        if (receiver) {
+            RC::retain(receiver);
+        }
+        // Retain method if it's an object
+        if (method.is_object() && method.ref_type() == RefType::Strong && method.as_object()) {
+            RC::retain(method.as_object());
+        }
     }
 
     // Convenience constructor for InstanceObject
     BoundMethodObject(InstanceObject* recv, Value m, bool mutating = false)
-        : Object(ObjectType::BoundMethod), receiver(static_cast<Object*>(recv)), method(m), is_mutating(mutating) {
+        : BoundMethodObject(static_cast<Object*>(recv), m, mutating) {
     }
 
     // Convenience constructor for StructInstanceObject
     BoundMethodObject(StructInstanceObject* recv, Value m, bool mutating = false)
-        : Object(ObjectType::BoundMethod), receiver(static_cast<Object*>(recv)), method(m), is_mutating(mutating) {
+        : BoundMethodObject(static_cast<Object*>(recv), m, mutating) {
     }
 
     std::string to_string() const override {

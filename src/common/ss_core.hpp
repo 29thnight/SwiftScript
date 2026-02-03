@@ -106,15 +106,15 @@ public:
     static void weak_retain(Object* obj, Value* weak_slot);
     static void weak_release(Object* obj, Value* weak_slot);
 
-    // Deferred cleanup
-    static void process_deferred_releases(VM* vm);
-
     // Nil out all weak reference slots for an object
     static void nil_weak_refs(Object* obj);
 
 private:
+    // Internal: execute deinit for instances
+    static void execute_deinit_if_needed(VM* vm, Object* obj);
+    
     // Internal: release child objects of containers
-    static void release_children(VM* vm, Object* obj, std::unordered_set<Object*>& deleted_set);
+    static void release_children(VM* vm, Object* obj);
 };
 
 // Memory statistics
@@ -127,13 +127,9 @@ struct MemoryStats {
     size_t release_count{0};
 };
 
-// Debug utilities
-#ifdef SS_DEBUG
-    #define SS_DEBUG_RC(fmt, ...) \
-        printf("[RC] " fmt "\n", ##__VA_ARGS__)
-#else
-    #define SS_DEBUG_RC(fmt, ...)
-#endif
+// Debug utilities - ALWAYS ENABLED for debugging
+#define SS_DEBUG_RC(fmt, ...) \
+    printf("[RC] " fmt "\n", ##__VA_ARGS__)
 
 #define SS_ASSERT(cond, msg) assert((cond) && (msg))
 

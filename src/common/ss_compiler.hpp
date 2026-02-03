@@ -66,6 +66,8 @@ private:
         int depth;
         bool is_optional;
         bool is_captured{false};  // True if captured by closure
+        int use_count{0};         // Number of times this local is used
+        bool is_moved{false};     // True if ownership was moved
     };
 
     struct Upvalue {
@@ -171,6 +173,8 @@ private:
     void emit_self_property_set(const std::string& name, uint32_t line);
     void emit_load_self(uint32_t line);
     void emit_variable_get(const std::string& name, uint32_t line);
+    void emit_variable_get_move(const std::string& name, uint32_t line);  // Move semantics variant
+    bool can_use_move_semantics(const Expr* expr) const;
     FunctionPrototype::ParamDefaultValue build_param_default(const ParamDecl& param);
 
     void emit_op(OpCode op, uint32_t line);

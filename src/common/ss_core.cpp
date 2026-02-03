@@ -15,60 +15,6 @@ void RC::nil_weak_refs(Object* obj) {
     obj->rc.weak_refs.clear();
 }
 
-// ---- Helper: recursively release child objects in containers ----
-void RC::release_children(VM* vm, Object* obj, std::unordered_set<Object*>& deleted_set) {
-    if (obj->type == ObjectType::List) {
-        auto* list = static_cast<ListObject*>(obj);
-        for (auto& elem : list->elements) {
-            if (elem.is_object() && elem.ref_type() == RefType::Strong) {
-                Object* child = elem.as_object();
-                if (child && deleted_set.find(child) == deleted_set.end()) {
-                    RC::release(vm, child);
-                }
-            }
-        }
-    } else if (obj->type == ObjectType::Map) {
-        auto* map = static_cast<MapObject*>(obj);
-        for (auto& [key, value] : map->entries) {
-            if (value.is_object() && value.ref_type() == RefType::Strong) {
-                Object* child = value.as_object();
-                if (child && deleted_set.find(child) == deleted_set.end()) {
-                    RC::release(vm, child);
-                }
-            }
-        }
-    } else if (obj->type == ObjectType::Class) {
-        auto* klass = static_cast<ClassObject*>(obj);
-        for (auto& [key, value] : klass->methods) {
-            if (value.is_object() && value.ref_type() == RefType::Strong) {
-                Object* child = value.as_object();
-                if (child && deleted_set.find(child) == deleted_set.end()) {
-                    RC::release(vm, child);
-                }
-            }
-        }
-        for (const auto& property : klass->properties) {
-            if (property.default_value.is_object() &&
-                property.default_value.ref_type() == RefType::Strong) {
-                Object* child = property.default_value.as_object();
-                if (child && deleted_set.find(child) == deleted_set.end()) {
-                    RC::release(vm, child);
-                }
-            }
-        }
-    } else if (obj->type == ObjectType::Instance) {
-        auto* inst = static_cast<InstanceObject*>(obj);
-        for (auto& [key, value] : inst->fields) {
-            if (value.is_object() && value.ref_type() == RefType::Strong) {
-                Object* child = value.as_object();
-                if (child && deleted_set.find(child) == deleted_set.end()) {
-                    RC::release(vm, child);
-                }
-            }
-        }
-    }
-}
-
 // ---- Strong retain ----
 void RC::retain(Object* obj) {
     if (!obj) return;
@@ -79,7 +25,102 @@ void RC::retain(Object* obj) {
                 obj, object_type_name(obj->type), old_count, old_count + 1);
 }
 
-// ---- Strong release ----
+// ---- Helper: execute deinit if object is an instance ----
+void RC::execute_deinit_if_needed(VM* vm, Object* obj) {
+    if (!vm || obj->type != ObjectType::Instance) return;
+    
+    auto* inst = static_cast<InstanceObject*>(obj);
+    if (!inst->klass) return;
+    
+    // Look for deinit method
+    Value deinit_method;
+    ClassObject* current = inst->klass;
+    while (current) {
+        auto it = current->methods.find("deinit");
+        if (it != current->methods.end()) {
+            deinit_method = it->second;
+            break;
+        }
+        current = current->superclass;
+    }
+    
+    // Call deinit if found
+    if (!deinit_method.is_null() && deinit_method.is_object()) {
+        try {
+            vm->execute_deinit(inst, deinit_method);
+        } catch (...) {
+            // Ignore deinit errors during cleanup
+        }
+    }
+}
+
+// ---- Helper: release child objects in containers ----
+void RC::release_children(VM* vm, Object* obj) {
+    if (obj->type == ObjectType::List) {
+        auto* list = static_cast<ListObject*>(obj);
+        for (auto& elem : list->elements) {
+            if (elem.is_object() && elem.ref_type() == RefType::Strong) {
+                Object* child = elem.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::Map) {
+        auto* map = static_cast<MapObject*>(obj);
+        for (auto& [key, value] : map->entries) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::Class) {
+        auto* klass = static_cast<ClassObject*>(obj);
+        for (auto& [key, value] : klass->methods) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (const auto& property : klass->properties) {
+            if (property.default_value.is_object() &&
+                property.default_value.ref_type() == RefType::Strong) {
+                Object* child = property.default_value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::Instance) {
+        auto* inst = static_cast<InstanceObject*>(obj);
+        for (auto& [key, value] : inst->fields) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::BoundMethod) {
+        // BoundMethod owns receiver and method - release them
+        auto* bound = static_cast<BoundMethodObject*>(obj);
+        if (bound->receiver && !bound->receiver->rc.is_dead) {
+            RC::release(vm, bound->receiver);
+        }
+        if (bound->method.is_object() && bound->method.ref_type() == RefType::Strong) {
+            Object* method_obj = bound->method.as_object();
+            if (method_obj && !method_obj->rc.is_dead) {
+                RC::release(vm, method_obj);
+            }
+        }
+    }
+}
+
+// ---- Strong release (IMMEDIATE DEALLOCATION) ----
 void RC::release(VM* vm, Object* obj) {
     if (!obj) return;
 
@@ -94,23 +135,28 @@ void RC::release(VM* vm, Object* obj) {
                 obj, object_type_name(obj->type), old_count, new_count);
 
     if (new_count == 0) {
-        // Mark object as logically dead immediately so weak refs can detect it
+        // Mark object as logically dead immediately
         obj->rc.is_dead = true;
 
-        // Nil out weak references immediately (both paths)
+        // 1. Execute deinit (if instance)
+        execute_deinit_if_needed(vm, obj);
+
+        // 2. Nil out weak references
         nil_weak_refs(obj);
 
-        if (!vm) {
-            // No VM context: release children and delete immediately
-            std::unordered_set<Object*> deleted_set;
-            deleted_set.insert(obj);
-            release_children(nullptr, obj, deleted_set);
-            delete obj;
-            return;
+        // 3. Release children (recursive)
+        release_children(vm, obj);
+
+        // 4. Remove from VM's object list
+        if (vm) {
+            vm->remove_from_objects_list(obj);
+            vm->record_deallocation(*obj);
         }
 
-        // With VM context: add to deferred release list
-        vm->add_deferred_release(obj);
+        // 5. Delete object immediately
+        SS_DEBUG_RC("DEALLOCATE %p [%s]", obj, object_type_name(obj->type));
+        delete obj;
+        
     } else if (new_count < 0) {
         fprintf(stderr, "ERROR: Object %p [%s] has negative refcount: %d\n",
                 obj, object_type_name(obj->type), new_count);
@@ -154,71 +200,6 @@ void RC::weak_release(Object* obj, Value* weak_slot) {
     }
 }
 
-// ---- Deferred release processing ----
-void RC::process_deferred_releases(VM* vm) {
-    auto& deferred = vm->get_deferred_releases();
-
-    if (deferred.empty()) return;
-
-    SS_DEBUG_RC("Processing %zu deferred releases", deferred.size());
-
-    // Swap out the current deferred list so new deferrals during processing
-    // go into a fresh list (reentrant safety)
-    std::vector<Object*> to_process;
-    to_process.swap(deferred);
-
-    // Track already-deleted objects to prevent double-free from circular refs
-    std::unordered_set<Object*> deleted_set;
-
-    for (Object* obj : to_process) {
-        if (deleted_set.find(obj) != deleted_set.end()) {
-            continue;  // Already deleted via a child release
-        }
-
-        // Call deinit before releasing children
-        if (obj->type == ObjectType::Instance) {
-            auto* inst = static_cast<InstanceObject*>(obj);
-            if (inst->klass) {
-                // Look for deinit method
-                Value deinit_method;
-                ClassObject* current = inst->klass;
-                while (current) {
-                    auto it = current->methods.find("deinit");
-                    if (it != current->methods.end()) {
-                        deinit_method = it->second;
-                        break;
-                    }
-                    current = current->superclass;
-                }
-                
-                // Call deinit if found
-                if (!deinit_method.is_null() && deinit_method.is_object()) {
-                    try {
-                        vm->execute_deinit(inst, deinit_method);
-                    } catch (...) {
-                        // Ignore deinit errors during cleanup
-                    }
-                }
-            }
-        }
-
-        // Weak refs should already be nil'd in release(), but ensure cleanup
-        nil_weak_refs(obj);
-
-        // Release child objects
-        deleted_set.insert(obj);
-        release_children(vm, obj, deleted_set);
-
-        SS_DEBUG_RC("DEALLOCATE %p [%s]", obj, object_type_name(obj->type));
-
-        vm->remove_from_objects_list(obj);
-        vm->record_deallocation(*obj);
-        delete obj;
-    }
-
-    // If new objects were deferred during processing, they remain in
-    // deferred_releases_ and will be picked up on the next cleanup cycle.
-}
-
 } // namespace swiftscript
+
 

@@ -192,6 +192,16 @@ namespace swiftscript {
     };
 
     template<>
+    struct OpCodeHandler<OpCode::OP_POP_N> {
+        static void execute(VM& vm) {
+            uint16_t count = vm.read_short();
+            for (uint16_t i = 0; i < count; ++i) {
+                vm.pop();
+            }
+        }
+    };
+
+    template<>
     struct OpCodeHandler<OpCode::OP_DUP> {
         static void execute(VM& vm) {
             vm.push(vm.peek(0));
@@ -303,8 +313,16 @@ namespace swiftscript {
                 }
 
                 // Bind init as bound method for struct
+                // BoundMethod constructor will RETAIN instance (rc: 1 -> 2)
                 auto* bound = vm.allocate_object<BoundMethodObject>(instance, it->second);
+                
+                // Transfer ownership from callee_index to BoundMethod
+                Value old_instance = vm.stack_[callee_index];
                 vm.stack_[callee_index] = Value::from_object(bound);
+                if (old_instance.is_object() && old_instance.ref_type() == RefType::Strong && old_instance.as_object()) {
+                    RC::release(self, old_instance.as_object());  // rc: 2 -> 1
+                }
+                
                 callee = vm.stack_[callee_index];
                 obj = callee.as_object();
             }
@@ -347,10 +365,17 @@ namespace swiftscript {
                     return;
                 }
                 // Bind init as bound method
-                // BoundMethod takes ownership of instance (no retain/release needed)
-                // bound gets refcount=1 from allocate, instance refcount stays at 1 (now owned by BoundMethod)
+                // BoundMethod constructor will RETAIN instance (rc: 1 -> 2)
                 auto* bound = vm.allocate_object<BoundMethodObject>(instance, it->second);
+                
+                // Transfer ownership from callee_index to BoundMethod
+                // Release the instance reference that callee_index held
+                Value old_instance = vm.stack_[callee_index];
                 vm.stack_[callee_index] = Value::from_object(bound);
+                if (old_instance.is_object() && old_instance.ref_type() == RefType::Strong && old_instance.as_object()) {
+                    RC::release(self, old_instance.as_object());  // rc: 2 -> 1
+                }
+                
                 callee = vm.stack_[callee_index];
                 obj = callee.as_object();
             }
@@ -411,6 +436,7 @@ namespace swiftscript {
                 auto* bound = static_cast<BoundMethodObject*>(obj);
 
                 // Insert receiver with retain (new stack slot needs ownership)
+                // BoundMethod also holds a reference, so this is a second reference
                 Value receiver_val = Value::from_object(bound->receiver);
                 if (receiver_val.is_object() && receiver_val.ref_type() == RefType::Strong && receiver_val.as_object()) {
                     RC::retain(receiver_val.as_object());

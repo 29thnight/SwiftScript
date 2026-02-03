@@ -2589,7 +2589,14 @@ void Compiler::visit(CallExpr* expr) {
 
     bool has_named_args = false;
     for (size_t i = 0; i < expr->arguments.size(); ++i) {
-        compile_expr(expr->arguments[i].get());
+        // Optimization: Use move semantics for simple identifiers in last use
+        if (can_use_move_semantics(expr->arguments[i].get())) {
+            auto* ident = static_cast<IdentifierExpr*>(expr->arguments[i].get());
+            emit_variable_get_move(ident->name, expr->line);
+        } else {
+            compile_expr(expr->arguments[i].get());
+        }
+        
         emit_op(OpCode::OP_COPY_VALUE, expr->line);
         if (!expr->argument_names[i].empty()) {
             has_named_args = true;
@@ -2803,13 +2810,36 @@ void Compiler::begin_scope() {
 
 void Compiler::end_scope() {
     scope_depth_--;
+    
+    // Count how many locals to pop
+    size_t pop_count = 0;
+    size_t close_count = 0;
+    
+    for (auto it = locals_.rbegin(); it != locals_.rend(); ++it) {
+        if (it->depth <= scope_depth_) {
+            break;
+        }
+        if (it->is_captured) {
+            close_count++;
+        } else {
+            pop_count++;
+        }
+    }
+    
+    // Remove locals from the vector
     while (!locals_.empty() && locals_.back().depth > scope_depth_) {
         if (locals_.back().is_captured) {
             emit_op(OpCode::OP_CLOSE_UPVALUE, 0);
-        } else {
-            emit_op(OpCode::OP_POP, 0);
         }
         locals_.pop_back();
+    }
+    
+    // Use OP_POP_N for efficiency when popping multiple locals
+    if (pop_count > 1) {
+        emit_op(OpCode::OP_POP_N, 0);
+        emit_short(static_cast<uint16_t>(pop_count), 0);
+    } else if (pop_count == 1) {
+        emit_op(OpCode::OP_POP, 0);
     }
 }
 
@@ -4295,6 +4325,44 @@ void Compiler::emit_auto_entry_main_call() {
         emit_op(OpCode::OP_POP, entry_main_.line);
         return;
     }
+}
+
+// Check if an expression can use move semantics (simple identifier only for now)
+bool Compiler::can_use_move_semantics(const Expr* expr) const {
+    // Only apply move semantics to simple identifiers (not member access, etc.)
+    if (expr->kind != ExprKind::Identifier) {
+        return false;
+    }
+    
+    const auto* ident = static_cast<const IdentifierExpr*>(expr);
+    
+    // Don't move captured variables (used in closures)
+    int local = resolve_local(ident->name);
+    if (local != -1 && local < static_cast<int>(locals_.size())) {
+        return !locals_[local].is_captured;
+    }
+    
+    return true;
+}
+
+// Emit variable get with move semantics (no RETAIN)
+void Compiler::emit_variable_get_move(const std::string& name, uint32_t line) {
+    // TEMPORARY: Disable move semantics optimization (causes premature destruction)
+    // TODO: Fix by tracking moved variables in end_scope()
+    emit_variable_get(name, line);
+    return;
+    
+    /*
+    int local = resolve_local(name);
+    if (local != -1) {
+        emit_op(OpCode::OP_GET_LOCAL_MOVE, line);
+        emit_short(static_cast<uint16_t>(local), line);
+        return;
+    }
+    
+    // Fall back to regular get for non-locals (globals, upvalues)
+    emit_variable_get(name, line);
+    */
 }
 
 } // namespace swiftscript

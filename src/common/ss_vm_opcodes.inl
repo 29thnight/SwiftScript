@@ -93,6 +93,31 @@ namespace swiftscript {
     };
 
     template<>
+    struct OpCodeHandler<OpCode::OP_GET_LOCAL_MOVE> {
+        static void execute(VM& vm) {
+            uint16_t slot = vm.read_short();
+            size_t base = vm.current_stack_base();
+            if (base + slot >= vm.stack_.size()) {
+                throw std::runtime_error("Local slot out of range.");
+            }
+            
+            // Move semantics: Transfer value WITHOUT retain
+            Value val = vm.stack_[base + slot];
+            
+            // Clear the local slot (prevent double-release)
+            vm.stack_[base + slot] = Value::null();
+            
+            // Push without RC (ownership transferred)
+            if (val.is_object() && val.ref_type() == RefType::Strong) {
+                // Push raw (no retain)
+                vm.stack_.push_back(val);
+            } else {
+                vm.stack_.push_back(val);
+            }
+        }
+    };
+
+    template<>
     struct OpCodeHandler<OpCode::OP_SET_LOCAL> {
         static void execute(VM& vm) {
             uint16_t slot = vm.read_short();

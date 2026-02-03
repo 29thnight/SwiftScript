@@ -26,15 +26,6 @@ namespace swiftscript {
     }
 
     VM::~VM() {
-        // First, drain the deferred releases queue
-        is_collecting_ = true;
-        RC::process_deferred_releases(this);
-        // Process any newly-deferred objects from child releases
-        while (!deferred_releases_.empty()) {
-            RC::process_deferred_releases(this);
-        }
-        is_collecting_ = false;
-
         // Clean up all remaining objects in the linked list
         Object* obj = objects_head_;
         while (obj) {
@@ -155,10 +146,6 @@ namespace swiftscript {
         return name == "Int" || name == "Float" || name == "Bool" || name == "String";
     }
 
-    void VM::add_deferred_release(Object* obj) {
-        deferred_releases_.push_back(obj);
-    }
-
     void VM::remove_from_objects_list(Object* obj) {
         if (!objects_head_) return;
 
@@ -179,26 +166,8 @@ namespace swiftscript {
         }
     }
 
-    void VM::run_cleanup() {
-        if (is_collecting_ || deferred_releases_.empty()) {
-            return;
-        }
-        is_collecting_ = true;
-        RC::process_deferred_releases(this);
-        is_collecting_ = false;
-    }
-
-    void VM::collect_if_needed() {
-        if (!is_collecting_ &&
-            static_cast<size_t>(rc_operations_) >= config_.deferred_cleanup_threshold) {
-            run_cleanup();
-            rc_operations_ = 0;
-        }
-    }
-
     void VM::record_rc_operation() {
         ++rc_operations_;
-        collect_if_needed();
     }
 
     void VM::record_deallocation(const Object& obj) {
@@ -391,10 +360,6 @@ namespace swiftscript {
         ensure_builtin("Bool");
         ensure_builtin("String");
         Value result = run();
-        run_cleanup();
-        while (!deferred_releases_.empty()) {
-            run_cleanup();
-        }
         return result;
     }
 
@@ -426,10 +391,6 @@ namespace swiftscript {
                 if (frame.is_initializer) {
                     // For initializer, return the instance (self) instead
                     result = stack_[frame.stack_base];
-                    // Retain it since we're returning it
-                    if (result.is_object() && result.ref_type() == RefType::Strong && result.as_object()) {
-                        RC::retain(result.as_object());
-                    }
                 }
                 close_upvalues(stack_.data() + frame.stack_base);
                 // Pop all locals and arguments (releases their refcounts)
