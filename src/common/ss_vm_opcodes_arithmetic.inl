@@ -18,7 +18,14 @@ namespace swiftscript {
                 std::string combined = a.to_string();
                 combined += b.to_string();
                 auto* obj = vm.allocate_object<StringObject>(std::move(combined));
-                vm.push(Value::from_object(obj));
+                // pop()으로 가져온 피연산자들 release
+                if (a.is_object() && a.ref_type() == RefType::Strong && a.as_object()) {
+                    RC::release(&vm, a.as_object());
+                }
+                if (b.is_object() && b.ref_type() == RefType::Strong && b.as_object()) {
+                    RC::release(&vm, b.as_object());
+                }
+                vm.push_new(obj);
                 return;
             }
             if (a.is_int() && b.is_int()) {

@@ -525,12 +525,9 @@ namespace swiftscript {
                 ip_ = frame.return_address;
                 current_body_idx_ = frame.body_index;
                 set_active_body(current_body_idx_);
-                // For initializer, we already retained, so push without extra retain
-                if (frame.is_initializer) {
-                    stack_.push_back(result);  // Direct push without retain (already retained)
-                } else {
-                    push(result);
-                }
+                // pop()에서 ownership을 이전받았으므로 retain 없이 스택에 추가
+                // initializer는 위에서 이미 retain했고, non-initializer는 pop()에서 ownership 이전됨
+                stack_.push_back(result);
                 break;
             }
             case OpCode::OP_READ_LINE: 

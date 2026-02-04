@@ -377,7 +377,6 @@ namespace swiftscript {
                     return;
                 }
                 // Bind init as bound method
-                // BoundMethod retains the instance in constructor
                 auto* bound = vm.allocate_object<BoundMethodObject>(instance, it->second);
                 Value old_instance = vm.stack_[callee_index];
                 if (old_instance.is_object() && old_instance.ref_type() == RefType::Strong && old_instance.as_object()) {
@@ -444,8 +443,7 @@ namespace swiftscript {
             if (obj->type == ObjectType::BoundMethod) {
                 auto* bound = static_cast<BoundMethodObject*>(obj);
 
-                // Insert receiver with retain (new stack slot needs ownership)
-                // BoundMethod also holds a reference, so this is a second reference
+                // Insert receiver with retain (스택 슬롯은 ownership 필요)
                 Value receiver_val = Value::from_object(bound->receiver);
                 if (receiver_val.is_object() && receiver_val.ref_type() == RefType::Strong && receiver_val.as_object()) {
                     RC::retain(receiver_val.as_object());

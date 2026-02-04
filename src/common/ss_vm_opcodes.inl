@@ -298,7 +298,16 @@ namespace swiftscript {
                 break;
             }
 
-            vm.push(vm.get_property(obj, name));
+            Value result = vm.get_property(obj, name);
+
+            // pop()으로 가져온 obj의 ownership을 release
+            // get_property가 BoundMethod를 반환한 경우, BoundMethod가 receiver를 이미 retain했으므로 안전
+            // 필드 값을 반환한 경우, 필드 값은 Instance가 소유하고 있으므로 push에서 retain됨
+            if (obj.is_object() && obj.ref_type() == RefType::Strong && obj.as_object()) {
+                RC::release(&vm, obj.as_object());
+            }
+
+            vm.push(result);
         }
     };
 
