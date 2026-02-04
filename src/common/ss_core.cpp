@@ -76,10 +76,59 @@ void RC::release_children(VM* vm, Object* obj) {
                 }
             }
         }
+        for (auto& [key, value] : klass->static_methods) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (auto& [key, value] : klass->static_properties) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
         for (const auto& property : klass->properties) {
             if (property.default_value.is_object() &&
                 property.default_value.ref_type() == RefType::Strong) {
                 Object* child = property.default_value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+            // Release property observers
+            if (property.will_set_observer.is_object() && property.will_set_observer.ref_type() == RefType::Strong) {
+                Object* child = property.will_set_observer.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+            if (property.did_set_observer.is_object() && property.did_set_observer.ref_type() == RefType::Strong) {
+                Object* child = property.did_set_observer.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+            if (property.lazy_initializer.is_object() && property.lazy_initializer.ref_type() == RefType::Strong) {
+                Object* child = property.lazy_initializer.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (const auto& cp : klass->computed_properties) {
+            if (cp.getter.is_object() && cp.getter.ref_type() == RefType::Strong) {
+                Object* child = cp.getter.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+            if (cp.setter.is_object() && cp.setter.ref_type() == RefType::Strong) {
+                Object* child = cp.setter.as_object();
                 if (child && !child->rc.is_dead) {
                     RC::release(vm, child);
                 }
@@ -111,20 +160,166 @@ void RC::release_children(VM* vm, Object* obj) {
         if (method->target) {
             RC::release(vm, method->target);
         }
+    } else if (obj->type == ObjectType::StructInstance) {
+        auto* inst = static_cast<StructInstanceObject*>(obj);
+        for (auto& [key, value] : inst->fields) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::Struct) {
+        auto* st = static_cast<StructObject*>(obj);
+        for (auto& [key, value] : st->methods) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (auto& [key, value] : st->static_methods) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (auto& [key, value] : st->static_properties) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (const auto& property : st->properties) {
+            if (property.default_value.is_object() &&
+                property.default_value.ref_type() == RefType::Strong) {
+                Object* child = property.default_value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+            if (property.will_set_observer.is_object() && property.will_set_observer.ref_type() == RefType::Strong) {
+                Object* child = property.will_set_observer.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+            if (property.did_set_observer.is_object() && property.did_set_observer.ref_type() == RefType::Strong) {
+                Object* child = property.did_set_observer.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (const auto& cp : st->computed_properties) {
+            if (cp.getter.is_object() && cp.getter.ref_type() == RefType::Strong) {
+                Object* child = cp.getter.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+            if (cp.setter.is_object() && cp.setter.ref_type() == RefType::Strong) {
+                Object* child = cp.setter.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::EnumCase) {
+        auto* ec = static_cast<EnumCaseObject*>(obj);
+        for (auto& value : ec->associated_values) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::Enum) {
+        auto* en = static_cast<EnumObject*>(obj);
+        for (auto& [key, value] : en->methods) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (auto& [key, value] : en->cases) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+        for (const auto& cp : en->computed_properties) {
+            if (cp.getter.is_object() && cp.getter.ref_type() == RefType::Strong) {
+                Object* child = cp.getter.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+            if (cp.setter.is_object() && cp.setter.ref_type() == RefType::Strong) {
+                Object* child = cp.setter.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::Function) {
+        auto* func = static_cast<FunctionObject*>(obj);
+        for (auto& value : func->param_defaults) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::Tuple) {
+        auto* tuple = static_cast<TupleObject*>(obj);
+        for (auto& value : tuple->elements) {
+            if (value.is_object() && value.ref_type() == RefType::Strong) {
+                Object* child = value.as_object();
+                if (child && !child->rc.is_dead) {
+                    RC::release(vm, child);
+                }
+            }
+        }
+    } else if (obj->type == ObjectType::Closure) {
+        auto* closure = static_cast<ClosureObject*>(obj);
+        // Release the function
+        if (closure->function) {
+            RC::release(vm, closure->function);
+        }
+        // Release upvalues
+        for (auto* upvalue : closure->upvalues) {
+            if (upvalue && !upvalue->rc.is_dead) {
+                RC::release(vm, upvalue);
+            }
+        }
+    } else if (obj->type == ObjectType::Upvalue) {
+        auto* upvalue = static_cast<UpvalueObject*>(obj);
+        // Release the closed value if it holds an object
+        if (upvalue->closed.is_object() && upvalue->closed.ref_type() == RefType::Strong) {
+            Object* child = upvalue->closed.as_object();
+            if (child && !child->rc.is_dead) {
+                RC::release(vm, child);
+            }
+        }
     }
 }
 
 // ---- Strong retain ----
 void RC::retain(Object* obj) {
     if (!obj) return;
-
-    bool had_creator_ref = obj->rc.has_creator_ref.exchange(false, std::memory_order_acq_rel);
-    if (had_creator_ref) {
-        int32_t count = obj->rc.strong_count.load(std::memory_order_acquire);
-        SS_DEBUG_RC("RETAIN %p [%s] rc: %d -> %d (adopt)",
-                    obj, object_type_name(obj->type), count, count);
-        return;
-    }
 
     int32_t old_count = obj->rc.strong_count.fetch_add(1, std::memory_order_acq_rel);
 
@@ -135,11 +330,8 @@ void RC::retain(Object* obj) {
 void RC::adopt(Object* obj) {
     if (!obj) return;
 
-    bool had_creator_ref = obj->rc.has_creator_ref.exchange(false, std::memory_order_acq_rel);
-    if (!had_creator_ref) {
-        return;
-    }
-
+    // Adopt is used when transferring ownership without incrementing refcount
+    // The creator's reference becomes the new owner's reference
     int32_t count = obj->rc.strong_count.load(std::memory_order_acquire);
     SS_DEBUG_RC("ADOPT %p [%s] rc: %d -> %d",
                 obj, object_type_name(obj->type), count, count);

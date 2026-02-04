@@ -276,8 +276,13 @@ StructInstanceObject* StructInstanceObject::deep_copy(VM& vm) const {
             value.as_object()->type == ObjectType::StructInstance) {
             auto* nested = static_cast<StructInstanceObject*>(value.as_object());
             auto* nested_copy = nested->deep_copy(vm);
+            // No retain - allocate's rc:1 is transferred to field ownership
             copy->fields[name] = Value::from_object(nested_copy);
         } else {
+            // Retain object values for storage in the copy (shared reference)
+            if (value.is_object() && value.ref_type() == RefType::Strong && value.as_object()) {
+                RC::retain(value.as_object());
+            }
             copy->fields[name] = value;
         }
     }

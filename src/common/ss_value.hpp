@@ -341,7 +341,12 @@ public:
     std::vector<UpvalueObject*> upvalues;
 
     explicit ClosureObject(FunctionObject* fn)
-        : Object(ObjectType::Closure), function(fn) {}
+        : Object(ObjectType::Closure), function(fn) {
+        // Closure owns the function - retain it
+        if (function) {
+            RC::retain(function);
+        }
+    }
 
     std::string to_string() const override {
         return function ? function->to_string() : "<closure>";

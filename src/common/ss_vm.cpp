@@ -26,18 +26,38 @@ namespace swiftscript {
     }
 
     VM::~VM() {
-        // Clean up all remaining objects in the linked list
+        // 1. Clean up stack first (release all references)
+        while (!stack_.empty()) {
+            Value val = stack_.back();
+            stack_.pop_back();
+            if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object() && !val.as_object()->rc.is_dead) {
+                RC::release(this, val.as_object());
+            }
+        }
+
+        // 2. Clean up globals (release all references)
+        for (auto& [name, val] : globals_) {
+            if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object() && !val.as_object()->rc.is_dead) {
+                RC::release(this, val.as_object());
+            }
+        }
+        globals_.clear();
+
+        // 3. Clean up any remaining objects in the linked list
+        // These are objects with reference cycles or other leaks
+        // We need to force delete them without calling release_children
+        // (which could access already-deleted objects)
         Object* obj = objects_head_;
         while (obj) {
             Object* next = obj->next;
 
             // Call deinit for any remaining instances (even if refcount never hit zero)
-            if (obj->type == ObjectType::Instance) {
+            if (!obj->rc.is_dead && obj->type == ObjectType::Instance) {
                 auto* inst = static_cast<InstanceObject*>(obj);
-                if (inst->klass) {
+                if (inst->klass && !inst->klass->rc.is_dead) {
                     Value deinit_method;
                     ClassObject* current = inst->klass;
-                    while (current) {
+                    while (current && !current->rc.is_dead) {
                         auto it = current->methods.find("deinit");
                         if (it != current->methods.end()) {
                             deinit_method = it->second;
@@ -57,8 +77,14 @@ namespace swiftscript {
             }
 
             // Mark as dead and nil out weak references
-            obj->rc.is_dead = true;
-            RC::nil_weak_refs(obj);
+            if (!obj->rc.is_dead) {
+                obj->rc.is_dead = true;
+                RC::nil_weak_refs(obj);
+
+                // Log remaining objects that weren't properly released
+                SS_DEBUG_RC("LEAK WARNING: %p [%s] rc: %d (forcing delete)",
+                    obj, object_type_name(obj->type), obj->rc.strong_count.load());
+            }
 
             delete obj;
             obj = next;
@@ -69,6 +95,7 @@ namespace swiftscript {
             print_stats();
         }
     }
+
 
     void VM::push(Value val) {
         if (stack_.size() >= config_.max_stack_size) {
@@ -85,6 +112,21 @@ namespace swiftscript {
         stack_.push_back(val);
     }
 
+    void VM::push_new(Object* obj) {
+        // Push a newly allocated object (rc:0 at creation)
+        // Retain to give ownership to stack
+        if (stack_.size() >= config_.max_stack_size) {
+            throw std::runtime_error("Stack overflow");
+        }
+        if (obj) {
+            RC::retain(obj);
+            stats_.retain_count++;
+            record_rc_operation();
+        }
+        stack_.push_back(Value::from_object(obj));
+    }
+
+
     Value VM::pop() {
         if (stack_.empty()) {
             throw std::runtime_error("Stack underflow");
@@ -93,14 +135,25 @@ namespace swiftscript {
         Value val = stack_.back();
         stack_.pop_back();
 
-        // Handle RC for object values
-        if (val.is_object() && val.ref_type() == RefType::Strong) {
+        // Transfer ownership from stack to caller (no release here)
+        // Caller is responsible for releasing if discarding the value
+        return val;
+    }
+
+    void VM::discard() {
+        if (stack_.empty()) {
+            throw std::runtime_error("Stack underflow");
+        }
+
+        Value val = stack_.back();
+        stack_.pop_back();
+
+        // Release the discarded value
+        if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
             RC::release(this, val.as_object());
             stats_.release_count++;
             record_rc_operation();
         }
-
-        return val;
     }
 
     Value VM::peek(size_t offset) const {
@@ -128,6 +181,25 @@ namespace swiftscript {
         }
 
         globals_[name] = val;
+    }
+
+    void VM::set_global_new(const std::string& name, Object* obj) {
+        // Release old value if exists
+        auto it = globals_.find(name);
+        if (it != globals_.end()) {
+            if (it->second.is_object() && it->second.ref_type() == RefType::Strong) {
+                RC::release(this, it->second.as_object());
+                record_rc_operation();
+            }
+        }
+
+        // Retain newly allocated object (rc:0 at creation)
+        if (obj) {
+            RC::retain(obj);
+            stats_.retain_count++;
+            record_rc_operation();
+        }
+        globals_[name] = Value::from_object(obj);
     }
 
     Value VM::get_global(const std::string& name) const {
@@ -253,31 +325,48 @@ namespace swiftscript {
                     break;  // Exit deinit execution
                 }
 
-                // Execute the OPCODE (simplified - RC-free for deinit context)
+                // Execute the OPCODE with proper RC handling
                 switch (op) {
                     case OpCode::OP_CONSTANT: {
-                        stack_.push_back(read_constant());
+                        Value val = read_constant();
+                        // Retain for stack if object
+                        if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
+                            RC::retain(val.as_object());
+                        }
+                        stack_.push_back(val);
                         break;
                     }
                     case OpCode::OP_STRING: {
                         const std::string& str = read_string();
                         auto* obj = allocate_object<StringObject>(str);
-                        stack_.push_back(Value::from_object(obj));
+                        push_new(obj);  // Use push_new for proper RC
                         break;
                     }
                     case OpCode::OP_GET_LOCAL: {
                         uint16_t slot = read_short();
                         size_t base = call_frames_.back().stack_base;
-                        // Push without RC (self is dying, other locals shouldn't exist in deinit)
-                        stack_.push_back(stack_[base + slot - 1]);
+                        Value val = stack_[base + slot - 1];
+                        // Retain for stack
+                        if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
+                            RC::retain(val.as_object());
+                        }
+                        stack_.push_back(val);
                         break;
                     }
                     case OpCode::OP_GET_PROPERTY: {
                         const std::string& name = read_string();
                         Value obj_val = stack_.back();
                         stack_.pop_back();
-                        // get_property may allocate BoundMethod, handle with push for proper RC
+                        // Release the popped object value
+                        if (obj_val.is_object() && obj_val.ref_type() == RefType::Strong && obj_val.as_object()) {
+                            RC::release(this, obj_val.as_object());
+                        }
+                        // get_property may allocate BoundMethod
                         Value prop = get_property(obj_val, name);
+                        // Retain for stack
+                        if (prop.is_object() && prop.ref_type() == RefType::Strong && prop.as_object()) {
+                            RC::retain(prop.as_object());
+                        }
                         stack_.push_back(prop);
                         break;
                     }
@@ -285,11 +374,21 @@ namespace swiftscript {
                         Value val = stack_.back();
                         stack_.pop_back();
                         std::cout << val.to_string() << '\n';
+                        // Release the printed value
+                        if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
+                            RC::release(this, val.as_object());
+                        }
                         break;
                     }
-                    case OpCode::OP_POP:
+                    case OpCode::OP_POP: {
+                        Value val = stack_.back();
                         stack_.pop_back();
+                        // Release the discarded value
+                        if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
+                            RC::release(this, val.as_object());
+                        }
                         break;
+                    }
                     case OpCode::OP_NIL:
                         stack_.push_back(Value::null());
                         break;
@@ -310,9 +409,21 @@ namespace swiftscript {
         current_body_idx_ = saved_body;
         current_body_ = saved_body_ptr;
 
-        // Restore stack without RC (deinit runs in RC-free context)
-        // All values pushed during deinit are either primitives or from the dying object
-        stack_.resize(saved_stack_size);
+        // Clean up any remaining values on stack from deinit
+        // Note: self (inst) was pushed at saved_stack_size without retain,
+        // so we must NOT release it
+        while (stack_.size() > saved_stack_size + 1) {
+            Value val = stack_.back();
+            stack_.pop_back();
+            if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
+                RC::release(this, val.as_object());
+            }
+        }
+        // Pop self without release (it was pushed without retain)
+        if (stack_.size() > saved_stack_size) {
+            stack_.pop_back();
+        }
+
 
         // Restore call frames
         while (call_frames_.size() > saved_frames) {
@@ -353,7 +464,7 @@ namespace swiftscript {
                 std::move(has_defaults),
                 nullptr,
                 false);
-            set_global(name, Value::from_object(func));
+            set_global_new(name, func);  // Transfer ownership
         };
         ensure_builtin("Int");
         ensure_builtin("Float");
@@ -380,29 +491,46 @@ namespace swiftscript {
 
             switch (op)
             {
-			case OpCode::OP_RETURN:
+            case OpCode::OP_RETURN:
             {
                 Value result = pop();
                 if (call_frames_.empty()) {
+                    // Clean up any remaining locals before returning from top-level
+                    while (stack_.size() > 0) {
+                        discard();
+                    }
                     return result;
                 }
                 CallFrame frame = call_frames_.back();
                 call_frames_.pop_back();
                 if (frame.is_initializer) {
                     // For initializer, return the instance (self) instead
+                    // Need to retain before we pop it from the stack
+                    // First release the original result
+                    if (result.is_object() && result.ref_type() == RefType::Strong && result.as_object()) {
+                        RC::release(this, result.as_object());
+                    }
                     result = stack_[frame.stack_base];
+                    if (result.is_object() && result.ref_type() == RefType::Strong && result.as_object()) {
+                        RC::retain(result.as_object());
+                    }
                 }
                 close_upvalues(stack_.data() + frame.stack_base);
                 // Pop all locals and arguments (releases their refcounts)
                 size_t callee_index = frame.stack_base - 1;
                 while (stack_.size() > callee_index) {
-                    pop();
+                    discard();
                 }
                 chunk_ = frame.chunk;
                 ip_ = frame.return_address;
                 current_body_idx_ = frame.body_index;
                 set_active_body(current_body_idx_);
-                push(result);
+                // For initializer, we already retained, so push without extra retain
+                if (frame.is_initializer) {
+                    stack_.push_back(result);  // Direct push without retain (already retained)
+                } else {
+                    push(result);
+                }
                 break;
             }
             case OpCode::OP_READ_LINE: 
@@ -413,19 +541,27 @@ namespace swiftscript {
                     break;
                 }
                 auto* obj = allocate_object<StringObject>(std::move(line));
-                push(Value::from_object(obj));
+                push_new(obj);  // Transfer ownership
                 break;
             }
             case OpCode::OP_PRINT: 
             {
                 Value val = pop();
                 std::cout << val.to_string() << '\n';
+                // Release the printed value
+                if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
+                    RC::release(this, val.as_object());
+                }
                 break;
             }
             case OpCode::OP_THROW: {
                 // Throw statement - for now, just throw a runtime error
                 Value error_value = pop();
                 std::string error_msg = "Uncaught error: " + error_value.to_string();
+                // Release before throwing
+                if (error_value.is_object() && error_value.ref_type() == RefType::Strong && error_value.as_object()) {
+                    RC::release(this, error_value.as_object());
+                }
                 throw std::runtime_error(error_msg);
             }
             case OpCode::OP_HALT:
@@ -913,11 +1049,14 @@ namespace swiftscript {
                         // For mutating methods, bind to the original instance
                         // The VM will handle copying it back after the call
                         auto* bound = allocate_object<BoundMethodObject>(inst, method_it->second, true);
+                        // Note: bound starts at rc:0, caller's push() will retain
                         return Value::from_object(bound);
                     } else {
                         // For non-mutating methods, copy the instance for value semantics
                         auto* copy = inst->deep_copy(*this);
+                        // Note: copy starts at rc:0, BoundMethod constructor retains it
                         auto* bound = allocate_object<BoundMethodObject>(copy, method_it->second, false);
+                        // Note: bound starts at rc:0, caller's push() will retain
                         return Value::from_object(bound);
                     }
                 }
@@ -1097,11 +1236,11 @@ namespace swiftscript {
 
             Value value = def.value;
             if (def.string_value.has_value()) {
+                // Newly allocated object already has rc:1, no extra retain needed
                 auto* str_obj = allocate_object<StringObject>(*def.string_value);
                 value = Value::from_object(str_obj);
-            }
-
-            if (value.is_object() && value.ref_type() == RefType::Strong && value.as_object()) {
+            } else if (value.is_object() && value.ref_type() == RefType::Strong && value.as_object()) {
+                // For shared objects from prototype, retain to keep alive
                 RC::retain(value.as_object());
             }
             defaults.push_back(value);

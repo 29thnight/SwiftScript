@@ -159,7 +159,7 @@ namespace swiftscript {
         static void execute(VM& vm) {
             const std::string& str = vm.read_string();
             Object* str_obj = vm.allocate_object<StringObject>(str);
-            vm.push(Value::from_object(str_obj));
+            vm.push_new(str_obj);  // Transfer ownership
         }
     };
 
@@ -184,19 +184,23 @@ namespace swiftscript {
         }
     };
 
+
+
+
     template<>
     struct OpCodeHandler<OpCode::OP_POP> {
         static void execute(VM& vm) {
-            vm.pop();
+            vm.discard();
         }
     };
+
 
     template<>
     struct OpCodeHandler<OpCode::OP_POP_N> {
         static void execute(VM& vm) {
             uint16_t count = vm.read_short();
             for (uint16_t i = 0; i < count; ++i) {
-                vm.pop();
+                vm.discard();
             }
         }
     };
@@ -244,21 +248,27 @@ namespace swiftscript {
                 new_case->associated_labels = template_case->associated_labels;
 
                 // Collect associated values from arguments
+                // Transfer ownership from stack to associated_values (no extra retain needed)
                 for (size_t i = 0; i < arg_count; ++i) {
                     Value arg = vm.stack_[callee_index + 1 + i];
-                    if (arg.is_object() && arg.ref_type() == RefType::Strong && arg.as_object()) {
-                        RC::retain(arg.as_object());
-                    }
                     new_case->associated_values.push_back(arg);
                 }
 
-                // Pop arguments and callee, push new instance
-                while (vm.stack_.size() > callee_index) {
-                    vm.pop();
+                // Remove arguments and callee from stack without releasing
+                // (ownership transferred to associated_values)
+                // First, release only the callee (template_case)
+                Value callee_val = vm.stack_[callee_index];
+                if (callee_val.is_object() && callee_val.ref_type() == RefType::Strong && callee_val.as_object()) {
+                    RC::release(self, callee_val.as_object());
                 }
-                vm.push(Value::from_object(new_case));
+                // Resize stack to remove callee and args (args ownership transferred)
+                vm.stack_.resize(callee_index);
+                vm.push_new(new_case);  // Transfer ownership
 				return;
             }
+
+
+
 
             // Struct call -> instantiate (value type)
             if (obj->type == ObjectType::Struct) {
@@ -280,7 +290,7 @@ namespace swiftscript {
                     RC::release(self, old_callee.as_object());
                 }
                 vm.stack_[callee_index] = Value::from_object(instance);
-                RC::adopt(instance);
+                RC::retain(instance);  // rc:0 -> 1 for stack ownership
 
                 // Check for init method
                 auto it = struct_type->methods.find("init");
@@ -288,19 +298,21 @@ namespace swiftscript {
                     // No init: check for memberwise initializer pattern
                     // If arguments match property count, do memberwise init
                     if (arg_count == struct_type->properties.size()) {
-                        // Memberwise initializer
+                        // Memberwise initializer - transfer ownership from stack to fields
                         for (size_t i = 0; i < arg_count; ++i) {
                             Value arg = vm.stack_[callee_index + 1 + i];
                             const std::string& prop_name = struct_type->properties[i].name;
-                            if (arg.is_object() && arg.ref_type() == RefType::Strong && arg.as_object()) {
-                                RC::retain(arg.as_object());
+                            // Release old default value before assignment
+                            auto field_it = instance->fields.find(prop_name);
+                            if (field_it != instance->fields.end()) {
+                                if (field_it->second.is_object() && field_it->second.ref_type() == RefType::Strong && field_it->second.as_object()) {
+                                    RC::release(self, field_it->second.as_object());
+                                }
                             }
                             instance->fields[prop_name] = arg;
                         }
-                        // Discard args using pop(), leave instance on stack
-                        while (vm.stack_.size() > callee_index + 1) {
-                            vm.pop();
-                        }
+                        // Resize stack to remove args (ownership transferred, no release)
+                        vm.stack_.resize(callee_index + 1);
                         return;
                     }
                     else if (arg_count == 0) {
@@ -314,14 +326,14 @@ namespace swiftscript {
                 }
 
                 // Bind init as bound method for struct
-                // BoundMethod constructor will RETAIN instance (rc: 1 -> 2)
+                // BoundMethod constructor retains instance
                 auto* bound = vm.allocate_object<BoundMethodObject>(instance, it->second);
                 Value old_instance = vm.stack_[callee_index];
                 if (old_instance.is_object() && old_instance.ref_type() == RefType::Strong && old_instance.as_object()) {
                     RC::release(self, old_instance.as_object());
                 }
                 vm.stack_[callee_index] = Value::from_object(bound);
-                RC::adopt(bound);
+                RC::retain(bound);  // rc:0 -> 1 for stack ownership
                 callee = vm.stack_[callee_index];
                 obj = callee.as_object();
             }
@@ -346,33 +358,33 @@ namespace swiftscript {
                     }
                 }
 
+
                 // Replace callee with instance: release old callee (class object)
-                // Adopt the creator ref so the stack slot becomes the owner.
                 Value old_callee = vm.stack_[callee_index];
                 if (old_callee.is_object() && old_callee.ref_type() == RefType::Strong && old_callee.as_object()) {
                     RC::release(self, old_callee.as_object());
                 }
                 vm.stack_[callee_index] = Value::from_object(instance);
-                RC::adopt(instance);
+                RC::retain(instance);  // rc:0 -> 1 for stack ownership
 
                 // Initializer?
                 auto it = klass->methods.find("init");
                 if (it == klass->methods.end()) {
-                    // No init: discard args using pop(), leave instance on stack
+                    // No init: discard args, leave instance on stack
                     while (vm.stack_.size() > callee_index + 1) {
-                        vm.pop();
+                        vm.discard();
                     }
                     return;
                 }
                 // Bind init as bound method
-                // BoundMethod retains the instance; release the stack slot when swapping.
+                // BoundMethod retains the instance in constructor
                 auto* bound = vm.allocate_object<BoundMethodObject>(instance, it->second);
                 Value old_instance = vm.stack_[callee_index];
                 if (old_instance.is_object() && old_instance.ref_type() == RefType::Strong && old_instance.as_object()) {
                     RC::release(self, old_instance.as_object());
                 }
                 vm.stack_[callee_index] = Value::from_object(bound);
-                RC::adopt(bound);
+                RC::retain(bound);  // rc:0 -> 1 for stack ownership
                 callee = vm.stack_[callee_index];
                 obj = callee.as_object();
             }
@@ -399,9 +411,9 @@ namespace swiftscript {
                     }
                     arr->elements.push_back(arg);
 
-                    // Clean up stack using pop()
+                    // Clean up stack (discard values)
                     while (vm.stack_.size() > callee_index) {
-                        vm.pop();
+                        vm.discard();
                     }
 
                     // append returns nil
@@ -421,7 +433,7 @@ namespace swiftscript {
                     Value input = vm.stack_[callee_index + 1];
                     Value result = convert_builtin(vm, func->name, input);
                     while (vm.stack_.size() > callee_index) {
-                        vm.pop();
+                        vm.discard();
                     }
                     vm.push(result);
                     return;
@@ -655,9 +667,9 @@ namespace swiftscript {
                 }
 
                 while (vm.stack_.size() > callee_index) {
-                    vm.pop();
+                    vm.discard();
                 }
-                vm.push(Value::from_object(new_case));
+                vm.push_new(new_case);  // Transfer ownership
                 return;
             }
 
@@ -680,7 +692,7 @@ namespace swiftscript {
                     RC::release(self, old_callee.as_object());
                 }
                 vm.stack_[callee_index] = Value::from_object(instance);
-                RC::adopt(instance);
+                RC::retain(instance);  // rc:0 -> 1 for stack ownership
 
                 auto it = struct_type->methods.find("init");
                 if (it == struct_type->methods.end()) {
@@ -732,7 +744,7 @@ namespace swiftscript {
                         }
 
                         while (vm.stack_.size() > callee_index + 1) {
-                            vm.pop();
+                            vm.discard();
                         }
                         return;
                     }
@@ -751,7 +763,7 @@ namespace swiftscript {
                     RC::release(self, old_instance.as_object());
                 }
                 vm.stack_[callee_index] = Value::from_object(bound);
-                RC::adopt(bound);
+                RC::retain(bound);  // rc:0 -> 1 for stack ownership
                 callee = vm.stack_[callee_index];
                 obj = callee.as_object();
             }
@@ -780,12 +792,12 @@ namespace swiftscript {
                     RC::release(self, old_callee.as_object());
                 }
                 vm.stack_[callee_index] = Value::from_object(instance);
-                RC::adopt(instance);
+                RC::retain(instance);  // rc:0 -> 1 for stack ownership
 
                 auto it = klass->methods.find("init");
                 if (it == klass->methods.end()) {
                     while (vm.stack_.size() > callee_index + 1) {
-                        vm.pop();
+                        vm.discard();
                     }
                     return;
                 }
@@ -795,7 +807,7 @@ namespace swiftscript {
                     RC::release(self, old_instance.as_object());
                 }
                 vm.stack_[callee_index] = Value::from_object(bound);
-                RC::adopt(bound);
+                RC::retain(bound);  // rc:0 -> 1 for stack ownership
                 callee = vm.stack_[callee_index];
                 obj = callee.as_object();
             }
@@ -841,7 +853,7 @@ namespace swiftscript {
                     Value input = vm.stack_[callee_index + 1];
                     Value result = convert_builtin(vm, func->name, input);
                     while (vm.stack_.size() > callee_index) {
-                        vm.pop();
+                        vm.discard();
                     }
                     vm.push(result);
                     return;

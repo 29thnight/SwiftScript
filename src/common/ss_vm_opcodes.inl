@@ -56,7 +56,7 @@ namespace swiftscript {
                 proto.chunk,
                 proto.is_initializer,
                 proto.is_override);
-            vm.push(Value::from_object(func));
+            vm.push_new(func);  // Transfer ownership
 		}
 	};
 
@@ -125,7 +125,17 @@ namespace swiftscript {
             if (base + slot >= vm.stack_.size()) {
                 throw std::runtime_error("Local slot out of range.");
             }
-            vm.stack_[base + slot] = vm.peek(0);
+            Value new_val = vm.peek(0);
+            Value& old_val = vm.stack_[base + slot];
+            // Release old value
+            if (old_val.is_object() && old_val.ref_type() == RefType::Strong && old_val.as_object()) {
+                RC::release(&vm, old_val.as_object());
+            }
+            // Retain new value
+            if (new_val.is_object() && new_val.ref_type() == RefType::Strong && new_val.as_object()) {
+                RC::retain(new_val.as_object());
+            }
+            old_val = new_val;
         }
     };
 
@@ -369,6 +379,17 @@ namespace swiftscript {
                     vm.call_property_observer(will_set, obj_val, value);
                 }
 
+                // Release old value before assignment
+                auto field_it = inst->fields.find(name);
+                if (field_it != inst->fields.end()) {
+                    if (field_it->second.is_object() && field_it->second.ref_type() == RefType::Strong && field_it->second.as_object()) {
+                        RC::release(&vm, field_it->second.as_object());
+                    }
+                }
+                // Retain new value
+                if (value.is_object() && value.ref_type() == RefType::Strong && value.as_object()) {
+                    RC::retain(value.as_object());
+                }
                 inst->fields[name] = value;
 
                 if (!did_set.is_null()) {
@@ -473,6 +494,17 @@ namespace swiftscript {
                     vm.call_property_observer(will_set, obj_val, value);
                 }
 
+                // Release old value before assignment
+                auto field_it = si->fields.find(name);
+                if (field_it != si->fields.end()) {
+                    if (field_it->second.is_object() && field_it->second.ref_type() == RefType::Strong && field_it->second.as_object()) {
+                        RC::release(&vm, field_it->second.as_object());
+                    }
+                }
+                // Retain new value
+                if (value.is_object() && value.ref_type() == RefType::Strong && value.as_object()) {
+                    RC::retain(value.as_object());
+                }
                 // Set the property
                 si->fields[name] = value;
 
@@ -601,6 +633,7 @@ namespace swiftscript {
                 proto.is_initializer,
                 proto.is_override);
 
+            // ClosureObject constructor retains func, so we pass ownership
             auto* closure = vm.allocate_object<ClosureObject>(func);
             closure->upvalues.resize(proto.upvalues.size(), nullptr);
 
@@ -626,7 +659,7 @@ namespace swiftscript {
                 }
             }
 
-            vm.push(Value::from_object(closure));
+            vm.push_new(closure);  // Transfer ownership
         }
     };
 
@@ -660,7 +693,17 @@ namespace swiftscript {
             if (slot >= closure->upvalues.size()) {
                 throw std::runtime_error("Upvalue index out of range.");
             }
-            *closure->upvalues[slot]->location = vm.peek(0);
+            Value new_val = vm.peek(0);
+            Value& old_val = *closure->upvalues[slot]->location;
+            // Release old value
+            if (old_val.is_object() && old_val.ref_type() == RefType::Strong && old_val.as_object()) {
+                RC::release(&vm, old_val.as_object());
+            }
+            // Retain new value
+            if (new_val.is_object() && new_val.ref_type() == RefType::Strong && new_val.as_object()) {
+                RC::retain(new_val.as_object());
+            }
+            old_val = new_val;
         }
     };
 
@@ -687,7 +730,7 @@ namespace swiftscript {
             }
             const std::string& name = vm.chunk_->string_table[name_idx];
             auto* klass = vm.allocate_object<ClassObject>(name);
-            vm.push(Value::from_object(klass));
+            vm.push_new(klass);  // Transfer ownership
         }
 	};
 
@@ -699,7 +742,18 @@ namespace swiftscript {
             if (vm.stack_.size() < 2) {
                 throw std::runtime_error("Stack underflow on method definition.");
             }
-            Value method_val = vm.pop();
+            
+            // Peek first, retain for map ownership, then discard from stack
+            Value method_val = vm.peek(0);
+            
+            // RETAIN for map ownership
+            if (method_val.is_object() && method_val.ref_type() == RefType::Strong && method_val.as_object()) {
+                RC::retain(method_val.as_object());
+            }
+            
+            // Discard from stack (releases stack's ownership)
+            vm.discard();
+            
             Value type_val = vm.peek(0);
 
             if (!type_val.is_object() || !type_val.as_object()) {
@@ -750,6 +804,7 @@ namespace swiftscript {
                     }
                 }
 
+                // Method already retained before pop, just store in map
                 if (is_static) {
                     klass->static_methods[name] = method_val;
                 }
@@ -760,6 +815,9 @@ namespace swiftscript {
             // Handle EnumObject
             else if (type_obj->type == ObjectType::Enum) {
                 auto* enum_type = static_cast<EnumObject*>(type_obj);
+                
+                
+                // Method already retained before pop, just store in map
                 enum_type->methods[name] = method_val;
             }
             // Handle StructObject (for extension and static methods)
@@ -784,6 +842,8 @@ namespace swiftscript {
                 if (func && (func->params.empty() || func->params[0] != "self")) {
                     is_static = true;
                 }
+
+                // Method already retained before pop, just store in map
 
                 if (is_static) {
                     struct_type->static_methods[name] = method_val;
@@ -811,10 +871,12 @@ namespace swiftscript {
                 throw std::runtime_error("Stack underflow on property definition.");
             }
             Value default_value = vm.peek(0);
+            // Retain for property storage
             if (default_value.is_object() && default_value.ref_type() == RefType::Strong) {
                 RC::retain(default_value.as_object());
             }
-            vm.pop();
+            // Discard from stack (releases stack's ownership)
+            vm.discard();
             Value type_val = vm.peek(0);
             if (!type_val.is_object() || !type_val.as_object()) {
                 throw std::runtime_error("OP_DEFINE_PROPERTY expects class or struct on stack.");
@@ -883,11 +945,15 @@ namespace swiftscript {
                 /*is_override*/    false
             );
 
-            return vm.allocate_object<ClosureObject>(func);
+            auto* closure = vm.allocate_object<ClosureObject>(func);
+            // Retain for storage (allocate starts at rc:0)
+            RC::retain(closure);
+            return closure;
         }
 
         static Value make_optional_closure_value(VM & vm, uint16_t fn_idx) {
             if (fn_idx == 0xFFFF) return Value::null();
+            // make_closure_from_proto_index already retains
             return Value::from_object(make_closure_from_proto_index(vm, fn_idx));
         }
 
@@ -999,6 +1065,7 @@ namespace swiftscript {
                     false
                 );
                 auto* will_set_closure = vm.allocate_object<ClosureObject>(will_set_func);
+                RC::retain(will_set_closure);  // Retain for storage
                 will_set_observer = Value::from_object(will_set_closure);
             }
 
@@ -1020,6 +1087,7 @@ namespace swiftscript {
                     false
                 );
                 auto* did_set_closure = vm.allocate_object<ClosureObject>(did_set_func);
+                RC::retain(did_set_closure);  // Retain for storage
                 did_set_observer = Value::from_object(did_set_closure);
             }
 
@@ -1069,7 +1137,11 @@ namespace swiftscript {
             auto* subclass = static_cast<ClassObject*>(subclass_val.as_object());
             auto* superclass = static_cast<ClassObject*>(superclass_val.as_object());
             subclass->superclass = superclass;
-            // Remove superclass from stack, keep subclass on top
+            // Remove superclass from stack with proper RC
+            // Release the superclass reference before erasing
+            if (superclass_val.is_object() && superclass_val.ref_type() == RefType::Strong && superclass_val.as_object()) {
+                RC::release(&vm, superclass_val.as_object());
+            }
             vm.stack_.erase(vm.stack_.end() - 2);
         }
 	};
@@ -1093,7 +1165,7 @@ namespace swiftscript {
             }
 
             auto* bound = vm.allocate_object<BoundMethodObject>(inst, method_value);
-            vm.push(Value::from_object(bound));
+            vm.push_new(bound);  // Transfer ownership
         }
     };
 
@@ -1109,9 +1181,13 @@ namespace swiftscript {
                 temp[i] = vm.pop();
             }
             for (const auto& v : temp) {
+                // Retain for storage in list (pop released the stack's reference)
+                if (v.is_object() && v.ref_type() == RefType::Strong && v.as_object()) {
+                    RC::retain(v.as_object());
+                }
                 arr->elements.push_back(v);
             }
-            vm.push(Value::from_object(arr));
+            vm.push_new(arr);  // Transfer ownership
 		}
     };
 
@@ -1132,9 +1208,13 @@ namespace swiftscript {
                     throw std::runtime_error("Dictionary key must be a string.");
                 }
                 auto* str_key = static_cast<StringObject*>(k.as_object());
+                // Retain value for storage (pop released the stack's reference)
+                if (v.is_object() && v.ref_type() == RefType::Strong && v.as_object()) {
+                    RC::retain(v.as_object());
+                }
                 dict->entries[str_key->data] = v;
             }
-            vm.push(Value::from_object(dict));
+            vm.push_new(dict);  // Transfer ownership
         }
 	};
 
@@ -1198,7 +1278,16 @@ namespace swiftscript {
                 if (idx < 0 || idx >= static_cast<int>(list->elements.size())) {
                     throw std::runtime_error("List subscript out of range.");
                 }
-                list->elements[idx] = value;
+                // Release old value before assignment
+                Value& old_val = list->elements[idx];
+                if (old_val.is_object() && old_val.ref_type() == RefType::Strong && old_val.as_object()) {
+                    RC::release(&vm, old_val.as_object());
+                }
+                // Retain new value (value was popped, so it's been released, need to retain for storage)
+                if (value.is_object() && value.ref_type() == RefType::Strong && value.as_object()) {
+                    RC::retain(value.as_object());
+                }
+                old_val = value;
                 vm.push(value);
                 return;
             }
@@ -1208,6 +1297,17 @@ namespace swiftscript {
                     throw std::runtime_error("Dictionary subscript must be a string.");
                 }
                 auto* str_key = static_cast<StringObject*>(index.as_object());
+                // Release old value if exists
+                auto it = dict->entries.find(str_key->data);
+                if (it != dict->entries.end()) {
+                    if (it->second.is_object() && it->second.ref_type() == RefType::Strong && it->second.as_object()) {
+                        RC::release(&vm, it->second.as_object());
+                    }
+                }
+                // Retain new value (value was popped, so need to retain for storage)
+                if (value.is_object() && value.ref_type() == RefType::Strong && value.as_object()) {
+                    RC::retain(value.as_object());
+                }
                 dict->entries[str_key->data] = value;
                 vm.push(value);
                 return;
@@ -1232,6 +1332,10 @@ namespace swiftscript {
                 temp[i] = vm.pop();
             }
             for (const auto& v : temp) {
+                // Retain for storage in tuple (pop released the stack's reference)
+                if (v.is_object() && v.ref_type() == RefType::Strong && v.as_object()) {
+                    RC::retain(v.as_object());
+                }
                 tuple->elements.push_back(v);
             }
 
@@ -1251,7 +1355,7 @@ namespace swiftscript {
                 }
             }
 
-            vm.push(Value::from_object(tuple));
+            vm.push_new(tuple);  // Transfer ownership
         }
     };
 
@@ -1304,7 +1408,7 @@ namespace swiftscript {
             }
             const std::string& name = vm.chunk_->string_table[name_idx];
             auto* struct_type = vm.allocate_object<StructObject>(name);
-            vm.push(Value::from_object(struct_type));
+            vm.push_new(struct_type);  // Transfer ownership
         }
     };
 
@@ -1318,7 +1422,18 @@ namespace swiftscript {
             if (vm.stack_.size() < 2) {
                 throw std::runtime_error("Stack underflow on struct method definition.");
             }
-            Value method_val = vm.pop();
+            
+            // Peek first, retain for map ownership, then discard from stack
+            Value method_val = vm.peek(0);
+            
+            // RETAIN for map ownership
+            if (method_val.is_object() && method_val.ref_type() == RefType::Strong && method_val.as_object()) {
+                RC::retain(method_val.as_object());
+            }
+            
+            // Discard from stack (releases stack's ownership)
+            vm.discard();
+            
             Value struct_val = vm.peek(0);
             if (!struct_val.is_object() || !struct_val.as_object() ||
                 struct_val.as_object()->type != ObjectType::Struct) {
@@ -1329,29 +1444,38 @@ namespace swiftscript {
             }
             auto* struct_type = static_cast<StructObject*>(struct_val.as_object());
             const std::string& name = vm.chunk_->string_table[name_idx];
+            
+            // Method already retained, just store in map
             struct_type->methods[name] = method_val;
             struct_type->mutating_methods[name] = (is_mutating != 0);
         }
     };
+
+
+
+
 
     OPCODE(OpCode::OP_COPY_VALUE)
     {
         OP_BODY
         {
             // Deep copy a struct instance for value semantics
-            Value val = vm.pop();
+            Value val = vm.peek(0);
             if (val.is_object() && val.as_object() &&
                 val.as_object()->type == ObjectType::StructInstance) {
                 auto* inst = static_cast<StructInstanceObject*>(val.as_object());
                 auto* copy = inst->deep_copy(vm);
-                vm.push(Value::from_object(copy));
+                vm.discard();  // Discard original
+                vm.push_new(copy);  // Transfer ownership
             }
             else {
-                // Not a struct instance, just pass through
-                vm.push(val);
+                // Not a struct instance, just leave on stack (no-op)
+                // No need to pop and re-push the same value
             }
         }
     };
+
+
 
     OPCODE(OpCode::OP_ENUM)
     {
@@ -1364,7 +1488,7 @@ namespace swiftscript {
             }
             const std::string& name = vm.chunk_->string_table[name_idx];
             auto* enum_type = vm.allocate_object<EnumObject>(name);
-            vm.push(Value::from_object(enum_type));
+            vm.push_new(enum_type);  // Transfer ownership
         }
     };
 
@@ -1412,7 +1536,8 @@ namespace swiftscript {
                 }
             }
 
-            // Store in enum's cases map
+            // Store in enum's cases map (retain for map ownership)
+            RC::retain(case_obj);
             enum_type->cases[case_name] = Value::from_object(case_obj);
         }
     };

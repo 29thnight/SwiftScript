@@ -79,7 +79,9 @@ namespace swiftscript {
 
         // Stack operations
         void push(Value val);
-        Value pop();
+        void push_new(Object* obj);  // Push newly allocated object (transfers ownership, no extra retain)
+        Value pop();                 // Pop and transfer ownership to caller (caller must release if discarding)
+        void discard();              // Pop and release (for discarding values)
         Value peek(size_t offset = 0) const;
         size_t stack_size() const { return stack_.size(); }
 
@@ -88,6 +90,7 @@ namespace swiftscript {
 
         // Global variables
         void set_global(const std::string& name, Value val);
+        void set_global_new(const std::string& name, Object* obj);  // Set newly allocated object (transfers ownership)
         Value get_global(const std::string& name) const;
         bool has_global(const std::string& name) const;
 
