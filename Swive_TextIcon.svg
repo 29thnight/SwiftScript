@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:ns2="http://www.w3.org/1999/xlink" width="360" height="96" viewBox="0 0 360 96" version="1.1">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:ns2="http://www.w3.org/1999/xlink" width="200" height="80" viewBox="0 0 200 80" version="1.1">
   <defs id="defs1"/>
   
   
-  <g id="icon" transform="translate(8,16) scale(0.0625)">
+  <g id="icon" transform="translate(8,8) scale(0.0625)">
     <g inkscape:groupmode="layer" inkscape:label="Image" id="g1">
       
     
@@ -39388,5 +39388,5 @@ Ibz6+X8BEKW/pe2XhI0AAAAASUVORK5CYII=
     
 
   </g>
-  <text x="70" y="62" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="44" font-weight="600" fill="#FFFFFF">Swive</text>
+  <text x="84" y="52" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="40" font-weight="600" fill="#9aa0a6">Swive</text>
 </svg>
