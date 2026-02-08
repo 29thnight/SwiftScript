@@ -1,8 +1,8 @@
-# SwiftScript Language Reference
+# Swive Language Reference
 
 ## Overview
 
-SwiftScript는 Swift에서 영감을 받은 정적 타입 스크립트 언어입니다. 클래스, 구조체, 열거형, 프로토콜, 제네릭, 클로저, 옵셔널, 패턴 매칭, 에러 핸들링 등 현대적인 프로그래밍 패러다임을 지원하며, 네이티브 C++ 바인딩을 통해 확장 가능한 런타임 환경을 제공합니다.
+swive는 Swift에서 영감을 받은 정적 타입 스크립트 언어입니다. 클래스, 구조체, 열거형, 프로토콜, 제네릭, 클로저, 옵셔널, 패턴 매칭, 에러 핸들링 등 현대적인 프로그래밍 패러다임을 지원하며, 네이티브 C++ 바인딩을 통해 확장 가능한 런타임 환경을 제공합니다.
 
 **파일 확장자:** `.ss`
 **프로젝트 파일:** `.ssproject`
@@ -93,7 +93,7 @@ print("결과: ${1 + 2}")
 ### 타입 어노테이션
 
 ```swift
-let name: String = "SwiftScript"
+let name: String = "swive"
 let count: Int = 42
 let pi: Float = 3.14
 let active: Bool = true
@@ -104,7 +104,7 @@ let active: Bool = true
 초기값이 있으면 타입을 생략할 수 있습니다.
 
 ```swift
-let name = "SwiftScript"   // String으로 추론
+let name = "swive"   // String으로 추론
 let count = 42              // Int로 추론
 let pi = 3.14               // Float로 추론
 let active = true           // Bool로 추론
@@ -1169,7 +1169,7 @@ let full = "Hello" + " " + "World"
 
 ## 18. 에러 핸들링
 
-SwiftScript는 `expected` 키워드 기반의 타입 안전한 에러 핸들링 시스템을 제공합니다. 함수가 실패할 수 있는 경우, 반환 타입에 `expected` 키워드로 에러 타입을 명시합니다.
+swive는 `expected` 키워드 기반의 타입 안전한 에러 핸들링 시스템을 제공합니다. 함수가 실패할 수 있는 경우, 반환 타입에 `expected` 키워드로 에러 타입을 명시합니다.
 
 ### expected 함수 선언
 
@@ -1345,7 +1345,7 @@ class User {
 
 ### 커스텀 어트리뷰트의 역할
 
-커스텀 어트리뷰트는 **메타데이터 전용**입니다. SwiftScript 코드 자체에서는 동작을 정의하지 않으며, 네이티브(C++) 측에서 리플렉션 API를 통해 어트리뷰트 정보를 읽어 활용합니다.
+커스텀 어트리뷰트는 **메타데이터 전용**입니다. swive 코드 자체에서는 동작을 정의하지 않으며, 네이티브(C++) 측에서 리플렉션 API를 통해 어트리뷰트 정보를 읽어 활용합니다.
 
 | 구분 | 어트리뷰트 | 동작 방식 |
 |------|-----------|-----------|
@@ -1438,9 +1438,9 @@ import "path/to/module.ss"
 
 ## 22. 네이티브 바인딩
 
-SwiftScript는 C++ 네이티브 바인딩을 통해 확장 가능합니다.
+swive는 C++ 네이티브 바인딩을 통해 확장 가능합니다.
 
-### SwiftScript 측 선언
+### swive 측 선언
 
 ```swift
 [Native.Class("Vector3")]

@@ -1,8 +1,8 @@
 #pragma once
-
+#include <cassert>
 #include "ss_core.hpp"
 
-namespace swiftscript {
+namespace swive {
 
 // Value types (unboxed - stored directly in Value)
 using Int = int64_t;
@@ -698,7 +698,7 @@ public:
 // Forward declaration for native type info
 struct NativeTypeInfo;
 
-// Native object wrapper - wraps C++ objects for use in SwiftScript
+// Native object wrapper - wraps C++ objects for use in Swive
 class NativeObject : public Object {
 public:
     void* native_ptr;              // Pointer to the actual C++ object
@@ -734,4 +734,4 @@ public:
 // Verify size constraint
 static_assert(sizeof(Value) == 16, "Value must be exactly 16 bytes");
 
-} // namespace swiftscript
+} // namespace swive

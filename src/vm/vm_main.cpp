@@ -1,4 +1,4 @@
-#include "pch_.h"
+#include "pch.h"
 #include "ss_project.hpp"
 #include "ss_project_resolver.hpp"
 #include "ss_vm.hpp"
@@ -9,7 +9,7 @@
 #include <fstream>
 #include <filesystem>
 
-namespace swiftscript
+namespace swive
 {
 	// .ssasm 파일을 로드하고 실행하는 헬퍼 함수
     inline Value AssmblyRun(VM& vm, const std::string& ssasm_path)
@@ -48,7 +48,7 @@ struct TestVector3 {
 };
 
 void test_vector3_native_binding() {
-    using namespace swiftscript;
+    using namespace swive;
     auto& registry = NativeRegistry::instance();
     registry.clear();
 
@@ -142,12 +142,12 @@ void test_vector3_native_binding() {
 
 
 int main(int argc, char* argv[]) {
-    using namespace swiftscript;
+    using namespace swive;
 
     test_vector3_native_binding();
 
     if (argc < 2) {
-        std::cerr << "Usage: SwiftScriptVM <program>.ssasm\n";
+        std::cerr << "Usage: swivevm <program>.ssasm\n";
         return 1;
     }
 

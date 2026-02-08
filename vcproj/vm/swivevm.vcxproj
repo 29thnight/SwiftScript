@@ -21,32 +21,32 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{36348904-e027-4dd8-a112-9b969c34e0d0}</ProjectGuid>
-    <RootNamespace>SwiftScriptLib</RootNamespace>
+    <ProjectGuid>{30413cda-b530-43c7-8899-369989051a24}</ProjectGuid>
+    <RootNamespace>swivevm</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -74,15 +74,14 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <PrecompiledHeader>Use</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcproj\core\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\vm\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <Link>
-      <SubSystem>
-      </SubSystem>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -92,15 +91,14 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <PrecompiledHeader>Use</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcproj\core\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\vm\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <Link>
-      <SubSystem>
-      </SubSystem>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -108,16 +106,15 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcproj\core\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\vm\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Create</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)vcproj\common\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>
-      </SubSystem>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -127,61 +124,28 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcproj\core\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\vm\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Create</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)vcproj\common\;$(SolutionDir);$(SolutionDir)src\common\;$(SolutionDir)src\compiler\;$(SolutionDir)src\server\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>
-      </SubSystem>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\common\framework.h" />
-    <ClInclude Include="..\..\src\common\ss_ast.hpp" />
-    <ClInclude Include="..\..\src\common\ss_chunk.hpp" />
-    <ClInclude Include="..\..\src\common\ss_compiler.hpp" />
-    <ClInclude Include="..\..\src\common\ss_core.hpp" />
-    <ClInclude Include="..\..\src\common\ss_lexer.hpp" />
-    <ClInclude Include="..\..\src\common\ss_native_convert.hpp" />
-    <ClInclude Include="..\..\src\common\ss_native_registry.hpp" />
-    <ClInclude Include="..\..\src\common\ss_opcodes.hpp" />
-    <ClInclude Include="..\..\src\common\ss_parser.hpp" />
-    <ClInclude Include="..\..\src\common\ss_project.hpp" />
-    <ClInclude Include="..\..\src\common\ss_project_resolver.hpp" />
-    <ClInclude Include="..\..\src\common\ss_runner.hpp" />
-    <ClInclude Include="..\..\src\common\ss_token.hpp" />
-    <ClInclude Include="..\..\src\common\ss_type_checker.hpp" />
-    <ClInclude Include="..\..\src\common\ss_value.hpp" />
-    <ClInclude Include="..\..\src\common\ss_vm.hpp" />
-    <ClInclude Include="pch.h" />
+    <ClCompile Include="..\..\src\vm\vm_main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\src\common\ss_opcodes.def" />
-    <None Include="..\..\src\common\ss_vm_opcodes.inl" />
-    <None Include="..\..\src\common\ss_vm_opcodes_arithmetic.inl" />
-    <None Include="..\..\src\common\ss_vm_opcodes_basic.inl" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\src\common\ss_ast_clone.cpp" />
-    <ClCompile Include="..\..\src\common\ss_chunk.cpp" />
-    <ClCompile Include="..\..\src\common\ss_compiler.cpp" />
-    <ClCompile Include="..\..\src\common\ss_core.cpp" />
-    <ClCompile Include="..\..\src\common\ss_lexer.cpp" />
-    <ClCompile Include="..\..\src\common\ss_native_convert.cpp" />
-    <ClCompile Include="..\..\src\common\ss_native_registry.cpp" />
-    <ClCompile Include="..\..\src\common\ss_parser.cpp" />
-    <ClCompile Include="..\..\src\common\ss_project.cpp" />
-    <ClCompile Include="..\..\src\common\ss_project_resolver.cpp" />
-    <ClCompile Include="..\..\src\common\ss_token.cpp" />
-    <ClCompile Include="..\..\src\common\ss_type_checker.cpp" />
-    <ClCompile Include="..\..\src\common\ss_value.cpp" />
-    <ClCompile Include="..\..\src\common\ss_vm.cpp" />
-    <ClCompile Include="pch.cpp" />
+    <ProjectReference Include="..\core\SwiveCore.vcxproj">
+      <Project>{A1B2C3D4-1111-2222-3333-444455556666}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\vm_lib\SwiveVMLib.vcxproj">
+      <Project>{C3D4E5F6-3333-4444-5555-666677778888}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

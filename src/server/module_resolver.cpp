@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "module_resolver.hpp"
 
 static bool Exists(const std::filesystem::path& p) {

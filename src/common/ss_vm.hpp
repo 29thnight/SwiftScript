@@ -1,11 +1,12 @@
 #pragma once
 #include <limits>
+#include <array>
 #include <unordered_map>
 #include "ss_core.hpp"
 #include "ss_value.hpp"
 #include "ss_chunk.hpp"
 
-namespace swiftscript {
+namespace swive {
     // Primary OpCodeHandler template. Specializations in
     // `ss_vm_opcodes.inl` override `execute`. The primary implementation
     // provides a default that throws for unhandled opcodes.
@@ -98,7 +99,8 @@ namespace swiftscript {
 
         // Execution control
         void record_rc_operation();
-        Value interpret(const std::string& source);
+        // interpret() requires compiler - use ss_runner.hpp instead
+        // Value interpret(const std::string& source);
         Value execute(const Assembly& chunk);
 
         // Statistics
@@ -320,6 +322,6 @@ namespace swiftscript {
     // Build the handler table at program startup
     constexpr std::array<OpHandlerFunc, 256> make_handler_table();
 
-} // namespace swiftscript
+} // namespace swive
 
 #include "ss_vm_opcodes.inl"

@@ -16,11 +16,11 @@
 #include <utility>
 #include <variant>
 #include <cstdint>
+#include <cassert>
 #include <stdexcept>
 #include <unordered_set>
 #include <unordered_map>
 #include <atomic>
-#include <cassert>
 #include <string_view>
 #include <filesystem>
 #include <fstream>

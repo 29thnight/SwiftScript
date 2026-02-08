@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "analyzer.hpp"
 #include "module_resolver.hpp"
 #include "lsp_utils.hpp"
@@ -6,27 +6,27 @@
 #include <set>
 #include <unordered_set>
 
-// SwiftScript headers
+// Swive headers
 #include "ss_lexer.hpp"
 #include "ss_parser.hpp"
 #include "ss_ast.hpp"
 #include "ss_compiler.hpp"      // IModuleResolver
 #include "ss_type_checker.hpp"  // TypeChecker
 
-using swiftscript::Lexer;
-using swiftscript::Parser;
-using swiftscript::ParseError;
-using swiftscript::TokenType;
-using swiftscript::StmtKind;
-using swiftscript::ImportStmt;
-using swiftscript::TypeChecker;
-using swiftscript::TypeCheckError;
-using swiftscript::IModuleResolver;
-using swiftscript::FuncDeclStmt;
-using swiftscript::ClassDeclStmt;
-using swiftscript::StructDeclStmt;
-using swiftscript::EnumDeclStmt;
-using swiftscript::ProtocolDeclStmt;
+using swive::Lexer;
+using swive::Parser;
+using swive::ParseError;
+using swive::TokenType;
+using swive::StmtKind;
+using swive::ImportStmt;
+using swive::TypeChecker;
+using swive::TypeCheckError;
+using swive::IModuleResolver;
+using swive::FuncDeclStmt;
+using swive::ClassDeclStmt;
+using swive::StructDeclStmt;
+using swive::EnumDeclStmt;
+using swive::ProtocolDeclStmt;
 
 // ─── IModuleResolver adapter ────────────────────────────────
 
@@ -164,7 +164,7 @@ void Analyzer::Analyze(const std::string& docUri,
     }
 
     // 2) Parser
-    std::vector<swiftscript::StmtPtr> program;
+    std::vector<swive::StmtPtr> program;
     try {
         Parser parser(std::move(tokens));
         program = parser.parse();
@@ -294,7 +294,7 @@ void Analyzer::ComputeSemanticTokens(const std::string& text,
 
     // 2) Parse + TypeCheck to populate symbol tables
     //    (we do a full check_no_throw so the checker's known_types_ etc. are populated)
-    std::vector<swiftscript::StmtPtr> program;
+    std::vector<swive::StmtPtr> program;
     TypeChecker checker;
     bool checkerReady = false;
     try {

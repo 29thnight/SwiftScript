@@ -1,10 +1,7 @@
 #include "pch.h"
 #include "ss_vm.hpp"
-#include "ss_compiler.hpp"
-#include "ss_lexer.hpp"
-#include "ss_parser.hpp"
 
-namespace swiftscript {
+namespace swive {
 
     // Instantiate the OPCODE handler table from the constexpr factory in the
     // included `ss_vm_opcodes.inl`.
@@ -259,7 +256,7 @@ namespace swiftscript {
     void VM::print_stats() const {
         int64_t leaked = static_cast<int64_t>(stats_.total_allocated)
                        - static_cast<int64_t>(stats_.total_freed);
-        std::cout << "\n=== SwiftScript VM Statistics ===\n";
+        std::cout << "\n=== Swive VM Statistics ===\n";
         std::cout << "Total Allocated:  " << std::setw(10) << stats_.total_allocated << " bytes\n";
         std::cout << "Total Freed:      " << std::setw(10) << stats_.total_freed << " bytes\n";
         std::cout << "Current Objects:  " << std::setw(10) << stats_.current_objects << "\n";
@@ -431,15 +428,7 @@ namespace swiftscript {
         }
     }
 
-    Value VM::interpret(const std::string& source) {
-        Lexer lexer(source);
-        auto tokens = lexer.tokenize_all();
-        Parser parser(std::move(tokens));
-        auto program = parser.parse();
-        Compiler compiler;
-        Assembly chunk = compiler.compile(program);
-        return execute(chunk);
-    }
+    // NOTE: interpret() is moved to ss_runner.hpp since it depends on Compiler components
 
     Value VM::execute(const Assembly& chunk) {
         chunk_ = &chunk;
@@ -1133,12 +1122,12 @@ namespace swiftscript {
             throw std::runtime_error("Enum '" + enum_type->name + "' has no case or method named '" + name + "'");
         }
 
-        // Native object: look up methods from the associated SwiftScript class
+        // Native object: look up methods from the associated Swive class
         if (obj->type == ObjectType::Native) {
             auto* native_obj = static_cast<NativeObject*>(obj);
 
-            // Find the SwiftScript class that wraps this native type
-            // The class name in SwiftScript corresponds to the script-side class (e.g., "Vector3")
+            // Find the Swive class that wraps this native type
+            // The class name in Swive corresponds to the script-side class (e.g., "Vector3")
             // We need to find the ClassObject by looking through globals
             // The native_type_name stored in ClassObject matches native_obj->type_name
 
@@ -1639,4 +1628,4 @@ namespace swiftscript {
         return result;
     }
 
-} // namespace swiftscript
+} // namespace swive

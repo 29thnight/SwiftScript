@@ -1,4 +1,7 @@
 #pragma once
+#include <string>
+#include <fstream>
+#include "ss_core.hpp"
 #include "ss_project.hpp"
 #include "ss_project_resolver.hpp"
 #include "ss_vm.hpp"
@@ -6,7 +9,18 @@
 #include "ss_parser.hpp"
 #include "ss_compiler.hpp"
 
-namespace swiftscript {
+namespace swive {
+
+// interpret() function - compiles and executes source code in one step
+inline Value Interpret(VM& vm, const std::string& source) {
+    Lexer lexer(source);
+    auto tokens = lexer.tokenize_all();
+    Parser parser(std::move(tokens));
+    auto program = parser.parse();
+    Compiler compiler;
+    Assembly chunk = compiler.compile(program);
+    return vm.execute(chunk);
+}
 
 inline Value RunProject(VM& vm, const SSProject& proj) {
     // entry load
@@ -35,4 +49,4 @@ inline Value RunProject(VM& vm, const SSProject& proj) {
     return vm.execute(chunk);
 }
 
-} // namespace swiftscript
+} // namespace swive

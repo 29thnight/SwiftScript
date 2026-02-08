@@ -1,0 +1,12 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="vcproj/common/SwiveLib.vcxproj" Id="36348904-e027-4dd8-a112-9b969c34e0d0" />
+  <Project Path="vcproj/compiler/swivec.vcxproj" Id="078ebfae-3cfb-4932-b35d-6ecf60d14e4f" />
+  <Project Path="vcproj/compiler_lib/SwiveCompilerLib.vcxproj" Id="b2c3d4e5-2222-3333-4444-555566667777" />
+  <Project Path="vcproj/core/SwiveCore.vcxproj" Id="a1b2c3d4-1111-2222-3333-444455556666" />
+  <Project Path="vcproj/sever/SwiveServer.vcxproj" Id="3998f2ca-3c56-4fb1-ab0f-a7dec58b8bdd" />
+  <Project Path="vcproj/vm_lib/SwiveVMLib.vcxproj" Id="c3d4e5f6-3333-4444-5555-666677778888" />
+</Solution>

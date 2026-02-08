@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "lsp_server.hpp"
 #include "lsp_utils.hpp"
 #include <filesystem>
@@ -73,7 +73,7 @@ nlohmann::json LspServer::DiagnosticsToLsp(const std::vector<DiagnosticItem>& di
             {"end",   {{"line", d.endLine}, {"character", d.endCol}}}
         };
         item["severity"] = (int)d.severity; // LSP uses 1..4
-        item["source"] = "SwiftScript";
+        item["source"] = "Swive";
         item["message"] = d.message;
         arr.push_back(std::move(item));
     }

@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+﻿#include "pch.h"
 #include "lsp_connection.hpp"
 #include "lsp_server.hpp"
 

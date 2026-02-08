@@ -1,7 +1,7 @@
 #pragma once
 #include "ss_vm_opcodes_arithmetic.inl"
 
-namespace swiftscript {
+namespace swive {
 
     // ============================================================================
     // Control Flow
@@ -1825,7 +1825,7 @@ namespace swiftscript {
         }
     };
 
-    constexpr std::array<OpHandlerFunc, 256> make_handler_table() 
+    inline constexpr std::array<OpHandlerFunc, 256> make_handler_table() 
     {
         std::array<OpHandlerFunc, 256> tbl{};
         tbl.fill(nullptr);
