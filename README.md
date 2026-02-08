@@ -1,4 +1,4 @@
-<img src="Swive_TextIcon.svg" alt="Swive" height="780" />
+<img src="Swive_TextIcon.svg" alt="Swive" height="190" />
 
 Swive는 Swift 문법의 핵심 요소를 지원하는 학습/실험용 스크립트 언어 프로젝트입니다. 파서/타입체커/VM을 갖춘 인터프리터 구조로 구성되어 있으며, Swift 스타일의 문법을 C++20 + STL 기반으로 구현하는 것을 목표로 합니다.
 
