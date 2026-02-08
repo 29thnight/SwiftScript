@@ -79,6 +79,8 @@ private:
 
     struct FunctionContext {
         TypeInfo return_type;
+        bool has_expected_error{false};
+        TypeInfo expected_error_type;  // error type for expected functions
     };
 
     std::unordered_map<std::string, TypeKind> known_types_;
@@ -86,6 +88,10 @@ private:
     std::unordered_map<std::string, std::unordered_map<std::string, TypeInfo>> type_methods_;
     std::unordered_map<std::string, std::unordered_map<std::string, AccessLevel>> member_access_levels_;  // Track access levels
     std::unordered_map<std::string, std::unordered_set<std::string>> mutating_methods_;  // Track mutating methods
+
+    // Range constraints: type_name -> property_name -> {min, max}
+    struct RangeConstraint { int64_t min; int64_t max; };
+    std::unordered_map<std::string, std::unordered_map<std::string, RangeConstraint>> property_range_constraints_;
     std::unordered_map<std::string, std::unordered_set<std::string>> enum_cases_;
     std::unordered_map<std::string, std::string> superclass_map_;
     std::unordered_map<std::string, std::unordered_set<std::string>> protocol_conformers_;
@@ -149,14 +155,12 @@ private:
     void check_for_in_stmt(const ForInStmt* stmt);
     void check_switch_stmt(const SwitchStmt* stmt);
     void check_return_stmt(const ReturnStmt* stmt);
-    void check_throw_stmt(const ThrowStmt* stmt);
     void check_func_decl(const FuncDeclStmt* stmt, const std::string& self_type = "");
     void check_class_decl(const ClassDeclStmt* stmt);
     void check_struct_decl(const StructDeclStmt* stmt);
     void check_enum_decl(const EnumDeclStmt* stmt);
     void check_protocol_decl(const ProtocolDeclStmt* stmt);
     void check_extension_decl(const ExtensionDeclStmt* stmt);
-    void check_do_catch_stmt(const DoCatchStmt* stmt);
     void check_attributes(const std::vector<Attribute>& attributes, uint32_t line);
 
     TypeInfo check_expr(const Expr* expr);
@@ -178,7 +182,6 @@ private:
     TypeInfo check_closure_expr(const ClosureExpr* expr);
     TypeInfo check_type_cast_expr(const TypeCastExpr* expr);
     TypeInfo check_type_check_expr(const TypeCheckExpr* expr);
-    TypeInfo check_try_expr(const TryExpr* expr);
     TypeInfo check_tuple_literal_expr(const TupleLiteralExpr* expr);
     TypeInfo check_tuple_member_expr(const TupleMemberExpr* expr);
 

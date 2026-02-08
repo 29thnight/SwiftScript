@@ -4,7 +4,7 @@
 namespace swiftscript {
 
 bool Token::is_keyword() const {
-    return type >= TokenType::Func && type <= TokenType::Do;
+    return type >= TokenType::Func && type <= TokenType::Expected;
 }
 
 bool Token::is_operator() const {
@@ -92,11 +92,7 @@ const char* TokenUtils::token_type_name(TokenType type) {
         "AS",
         "IS",
         "WHERE",
-        "TRY",
-        "CATCH",
-        "THROW",
-        "THROWS",
-        "DO",
+        "EXPECTED",
         "PLUS",
         "MINUS",
         "STAR",
@@ -201,11 +197,7 @@ TokenType TokenUtils::keyword_type(std::string_view str) {
         {"as", TokenType::As},
         {"is", TokenType::Is},
         {"where", TokenType::Where},
-        {"try", TokenType::Try},
-        {"catch", TokenType::Catch},
-        {"throw", TokenType::Throw},
-        {"throws", TokenType::Throws},
-        {"do", TokenType::Do},
+        {"expected", TokenType::Expected},
         {"true", TokenType::True},
         {"false", TokenType::False},
         {"null", TokenType::Null},

@@ -251,6 +251,9 @@ public:
         Value lazy_initializer;  // Closure to call on first access (if is_lazy)
         Value will_set_observer;  // Function value (or null if no observer)
         Value did_set_observer;   // Function value (or null if no observer)
+        bool has_range{false};
+        int64_t range_min{0};
+        int64_t range_max{0};
     };
     struct ComputedPropertyInfo {
         std::string name;
@@ -375,6 +378,9 @@ public:
         bool is_lazy{false};
         Value will_set_observer;  // Function value (or null if no observer)
         Value did_set_observer;   // Function value (or null if no observer)
+        bool has_range{false};
+        int64_t range_min{0};
+        int64_t range_max{0};
     };
     struct ComputedPropertyInfo {
         std::string name;

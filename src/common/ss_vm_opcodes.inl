@@ -294,6 +294,7 @@ namespace swiftscript {
             }
             case ObjectType::Enum: {
                 auto* en = static_cast<EnumObject*>(o);
+                // First check computed properties via metadata
                 const TypeDef* type_def = en ? vm.resolve_type_def(en->name) : nullptr;
                 if (type_def) {
                     const PropertyDef* prop_def = vm.find_property_def_for_type(*type_def, name, true);
@@ -305,6 +306,22 @@ namespace swiftscript {
                             vm.invoke_method_def(*getter_def, callee_index, 0, false, false);
                             return;
                         }
+                    }
+                }
+                // Then check enum cases map
+                if (en) {
+                    auto case_it = en->cases.find(name);
+                    if (case_it != en->cases.end()) {
+                        // obj was already popped at the top of OP_GET_PROPERTY, just release it
+                        if (obj.is_object() && obj.ref_type() == RefType::Strong && obj.as_object()) {
+                            RC::release(&vm, obj.as_object());
+                        }
+                        Value case_val = case_it->second;
+                        if (case_val.is_object() && case_val.as_object()) {
+                            RC::retain(case_val.as_object());
+                        }
+                        vm.push(case_val);
+                        return;
                     }
                 }
                 break;
@@ -415,6 +432,17 @@ namespace swiftscript {
                             did_set = prop.did_set_observer;
                             auto it = inst->fields.find(name);
                             if (it != inst->fields.end()) old_val = it->second;
+                            // Range constraint check
+                            if (prop.has_range && value.is_int()) {
+                                int64_t v = value.as_int();
+                                if (v < prop.range_min || v > prop.range_max) {
+                                    throw std::runtime_error(
+                                        "Value " + std::to_string(v) + " out of range [" +
+                                        std::to_string(prop.range_min) + ", " +
+                                        std::to_string(prop.range_max) + "] for property '" +
+                                        name + "'.");
+                                }
+                            }
                             break;
                         }
                     }
@@ -531,6 +559,17 @@ namespace swiftscript {
                             did_set = prop.did_set_observer;
                             auto it = si->fields.find(name);
                             if (it != si->fields.end()) old_val = it->second;
+                            // Range constraint check
+                            if (prop.has_range && value.is_int()) {
+                                int64_t v = value.as_int();
+                                if (v < prop.range_min || v > prop.range_max) {
+                                    throw std::runtime_error(
+                                        "Value " + std::to_string(v) + " out of range [" +
+                                        std::to_string(prop.range_min) + ", " +
+                                        std::to_string(prop.range_max) + "] for property '" +
+                                        name + "'.");
+                                }
+                            }
                             break;
                         }
                     }
@@ -941,6 +980,17 @@ namespace swiftscript {
             uint8_t flags = vm.read_byte();
             bool is_let = (flags & 0x1) != 0;
             bool is_static = (flags & 0x2) != 0;  // bit 1 = is_static
+            bool has_range = (flags & 0x8) != 0;   // bit 3 = has_range
+
+            // Read range values if present
+            int32_t range_min = 0, range_max = 0;
+            if (has_range) {
+                uint8_t b0 = vm.read_byte(), b1 = vm.read_byte(), b2 = vm.read_byte(), b3 = vm.read_byte();
+                range_min = static_cast<int32_t>(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
+                b0 = vm.read_byte(); b1 = vm.read_byte(); b2 = vm.read_byte(); b3 = vm.read_byte();
+                range_max = static_cast<int32_t>(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
+            }
+
             if (vm.stack_.size() < 2) {
                 throw std::runtime_error("Stack underflow on property definition.");
             }
@@ -964,7 +1014,6 @@ namespace swiftscript {
             if (type_obj->type == ObjectType::Class) {
                 auto* klass = static_cast<ClassObject*>(type_obj);
                 if (is_static) {
-                    // Store in static_properties
                     klass->static_properties[prop_name] = default_value;
                 }
                 else {
@@ -972,13 +1021,15 @@ namespace swiftscript {
                     info.name = prop_name;
                     info.default_value = default_value;
                     info.is_let = is_let;
+                    info.has_range = has_range;
+                    info.range_min = range_min;
+                    info.range_max = range_max;
                     klass->properties.push_back(std::move(info));
                 }
             }
             else if (type_obj->type == ObjectType::Struct) {
                 auto* struct_type = static_cast<StructObject*>(type_obj);
                 if (is_static) {
-                    // Store in static_properties
                     struct_type->static_properties[prop_name] = default_value;
                 }
                 else {
@@ -986,6 +1037,9 @@ namespace swiftscript {
                     info.name = prop_name;
                     info.default_value = default_value;
                     info.is_let = is_let;
+                    info.has_range = has_range;
+                    info.range_min = range_min;
+                    info.range_max = range_max;
                     struct_type->properties.push_back(std::move(info));
                 }
             }

@@ -35,6 +35,9 @@ method_body_lookup_.clear();
 specialized_functions_.clear();
 imported_module_asts_.clear();
 
+// Emit built-in $Expected enum definition
+emit_expected_enum_definition();
+
 // Step 3: Compile statements (skip generic templates, they're handled by type checker)
 for (const auto& stmt : specialized_program) {
     if (!stmt) {
@@ -117,9 +120,6 @@ void Compiler::compile_stmt(Stmt* stmt) {
         case StmtKind::Return:
             visit(static_cast<ReturnStmt*>(stmt));
             break;
-        case StmtKind::Throw:
-            visit(static_cast<ThrowStmt*>(stmt));
-            break;
         case StmtKind::FuncDecl:
             visit(static_cast<FuncDeclStmt*>(stmt));
             break;
@@ -175,6 +175,13 @@ void Compiler::visit(ClassDeclStmt* stmt) {
     size_t name_idx = identifier_constant(stmt->name);
 
     bool has_superclass = stmt->superclass_name.has_value();
+    // If "superclass" is actually a protocol, reclassify it as protocol conformance
+    if (has_superclass && known_protocol_names_.count(stmt->superclass_name.value())) {
+        stmt->protocol_conformances.insert(
+            stmt->protocol_conformances.begin(), stmt->superclass_name.value());
+        stmt->superclass_name.reset();
+        has_superclass = false;
+    }
     if (has_superclass && stmt->superclass_name.value() == stmt->name) {
         throw CompilerError("Class cannot inherit from itself", stmt->line);
     }
@@ -406,9 +413,35 @@ void Compiler::visit(ClassDeclStmt* stmt) {
 
             emit_op(OpCode::OP_DEFINE_PROPERTY, property->line);
             emit_short(static_cast<uint16_t>(property_name_idx), property->line);
-            // flags: bit 0 = is_let, bit 1 = is_static, bit 2 = is_lazy
-            uint8_t flags = (property->is_let ? 0x1 : 0x0) | (property->is_static ? 0x2 : 0x0) | (property->is_lazy ? 0x4 : 0x0);
+            // flags: bit 0 = is_let, bit 1 = is_static, bit 2 = is_lazy, bit 3 = has_range
+            bool has_range = false;
+            int64_t range_min = 0, range_max = 0;
+            for (const auto& attr : property->attributes) {
+                if (attr.name == "Range" && attr.arguments.size() == 2) {
+                    auto* min_lit = dynamic_cast<LiteralExpr*>(attr.arguments[0].get());
+                    auto* max_lit = dynamic_cast<LiteralExpr*>(attr.arguments[1].get());
+                    if (min_lit && max_lit && min_lit->value.is_int() && max_lit->value.is_int()) {
+                        has_range = true;
+                        range_min = min_lit->value.as_int();
+                        range_max = max_lit->value.as_int();
+                    }
+                }
+            }
+            uint8_t flags = (property->is_let ? 0x1 : 0x0) | (property->is_static ? 0x2 : 0x0) | (property->is_lazy ? 0x4 : 0x0) | (has_range ? 0x8 : 0x0);
             emit_byte(flags, property->line);
+            if (has_range) {
+                // Emit range_min and range_max as 4-byte signed integers (little-endian)
+                int32_t rmin = static_cast<int32_t>(range_min);
+                int32_t rmax = static_cast<int32_t>(range_max);
+                emit_byte(static_cast<uint8_t>(rmin & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmin >> 8) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmin >> 16) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmin >> 24) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>(rmax & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmax >> 8) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmax >> 16) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmax >> 24) & 0xFF), property->line);
+            }
         }
     }
 
@@ -716,11 +749,37 @@ if (scope_depth_ > 0) {
 
             emit_op(OpCode::OP_DEFINE_PROPERTY, property->line);
             emit_short(static_cast<uint16_t>(property_name_idx), property->line);
-            uint8_t flags = property->is_let ? 1 : 0;
+            // flags: bit 0 = is_let, bit 3 = has_range
+            bool has_range = false;
+            int64_t range_min = 0, range_max = 0;
+            for (const auto& attr : property->attributes) {
+                if (attr.name == "Range" && attr.arguments.size() == 2) {
+                    auto* min_lit = dynamic_cast<LiteralExpr*>(attr.arguments[0].get());
+                    auto* max_lit = dynamic_cast<LiteralExpr*>(attr.arguments[1].get());
+                    if (min_lit && max_lit && min_lit->value.is_int() && max_lit->value.is_int()) {
+                        has_range = true;
+                        range_min = min_lit->value.as_int();
+                        range_max = max_lit->value.as_int();
+                    }
+                }
+            }
+            uint8_t flags = (property->is_let ? 0x1 : 0x0) | (has_range ? 0x8 : 0x0);
             emit_byte(flags, property->line);
+            if (has_range) {
+                int32_t rmin = static_cast<int32_t>(range_min);
+                int32_t rmax = static_cast<int32_t>(range_max);
+                emit_byte(static_cast<uint8_t>(rmin & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmin >> 8) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmin >> 16) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmin >> 24) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>(rmax & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmax >> 8) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmax >> 16) & 0xFF), property->line);
+                emit_byte(static_cast<uint8_t>((rmax >> 24) & 0xFF), property->line);
+            }
         }
     }
-    
+
     // Define static properties
     for (const auto& property : stmt->properties) {
         if (!property->is_static) continue;
@@ -1386,6 +1445,7 @@ void Compiler::visit(IfStmt* stmt) {
 
 void Compiler::visit(IfLetStmt* stmt) {
     compile_expr(stmt->optional_expr.get());
+    emit_op(OpCode::OP_UNWRAP_EXPECTED, stmt->line);
 
     size_t else_jump = emit_jump(OpCode::OP_JUMP_IF_NIL, stmt->line);
     // OP_JUMP_IF_NIL�� nil�� �ƴ� �� ���� ���ÿ� ����
@@ -1412,6 +1472,7 @@ void Compiler::visit(GuardLetStmt* stmt) {
     }
 
     compile_expr(stmt->optional_expr.get());
+    emit_op(OpCode::OP_UNWRAP_EXPECTED, stmt->line);
 
     size_t else_jump = emit_jump(OpCode::OP_JUMP_IF_NIL, stmt->line);
     size_t locals_before = locals_.size();
@@ -1556,19 +1617,22 @@ void Compiler::visit(ForInStmt* stmt) {
         }
         
         compile_stmt(stmt->body.get());
-        
-        // Skip to increment if where condition was false
+
+        // Skip the where-false pop (where was true path, already popped above)
+        size_t skip_where_pop = 0;
         if (stmt->where_condition) {
+            skip_where_pop = emit_jump(OpCode::OP_JUMP, stmt->line);
             patch_jump(where_skip_jump);
-            emit_op(OpCode::OP_POP, stmt->line);
+            emit_op(OpCode::OP_POP, stmt->line);  // pop false (where condition failed)
+            patch_jump(skip_where_pop);
         }
-        
-        
+
+
         // Patch continue jumps
         for (size_t jump : loop_stack_.back().continue_jumps) {
             patch_jump(jump);
         }
-        
+
         // Increment i
         emit_op(OpCode::OP_GET_LOCAL, stmt->line);
         emit_short(static_cast<uint16_t>(loop_var_idx), stmt->line);
@@ -1667,18 +1731,21 @@ void Compiler::visit(ForInStmt* stmt) {
         
         // Execute loop body
         compile_stmt(stmt->body.get());
-        
-        // Skip to increment if where condition was false
+
+        // Skip the where-false pop (where was true path, already popped above)
+        size_t skip_where_pop = 0;
         if (stmt->where_condition) {
+            skip_where_pop = emit_jump(OpCode::OP_JUMP, stmt->line);
             patch_jump(where_skip_jump);
-            emit_op(OpCode::OP_POP, stmt->line);
+            emit_op(OpCode::OP_POP, stmt->line);  // pop false (where condition failed)
+            patch_jump(skip_where_pop);
         }
-        
+
         // Patch continue jumps
         for (size_t jump : loop_stack_.back().continue_jumps) {
             patch_jump(jump);
         }
-        
+
         // Increment index
         emit_op(OpCode::OP_GET_LOCAL, stmt->line);
         emit_short(static_cast<uint16_t>(index_idx), stmt->line);
@@ -1997,10 +2064,13 @@ void Compiler::visit(ImportStmt* stmt) {
 }
 
 void Compiler::visit(ProtocolDeclStmt* stmt) {
+    // Track protocol name for superclass disambiguation
+    known_protocol_names_.insert(stmt->name);
+
     // Protocols are a compile-time/type-system feature
     // At runtime, we store protocol definitions as metadata
     // For now, we'll create a protocol object that stores requirements
-    
+
     // Create protocol metadata
     auto protocol = std::make_shared<Protocol>();
     protocol->name = stmt->name;
@@ -2184,25 +2254,37 @@ void Compiler::visit(PrintStmt* stmt) {
 }
 
 void Compiler::visit(ReturnStmt* stmt) {
-    if (stmt->value) {
+    if (stmt->is_expected_error) {
+        // return expected.error(val) → $Expected.error(val)
+        emit_variable_get("$Expected", stmt->line);
+        size_t name_idx = identifier_constant("error");
+        emit_op(OpCode::OP_GET_PROPERTY, stmt->line);
+        emit_short(static_cast<uint16_t>(name_idx), stmt->line);
         compile_expr(stmt->value.get());
+        emit_op(OpCode::OP_CALL, stmt->line);
+        emit_short(1, stmt->line);
+    } else if (in_expected_function_) {
+        // In expected function: auto-wrap return value as $Expected.value(val)
+        emit_variable_get("$Expected", stmt->line);
+        size_t name_idx = identifier_constant("value");
+        emit_op(OpCode::OP_GET_PROPERTY, stmt->line);
+        emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+        if (stmt->value) {
+            compile_expr(stmt->value.get());
+        } else {
+            emit_op(OpCode::OP_NIL, stmt->line);
+        }
+        emit_op(OpCode::OP_CALL, stmt->line);
+        emit_short(1, stmt->line);
     } else {
-        emit_op(OpCode::OP_NIL, stmt->line);
+        // Normal function return
+        if (stmt->value) {
+            compile_expr(stmt->value.get());
+        } else {
+            emit_op(OpCode::OP_NIL, stmt->line);
+        }
     }
     emit_op(OpCode::OP_RETURN, stmt->line);
-}
-
-void Compiler::visit(ThrowStmt* stmt) {
-    // Compile the error value
-    if (stmt->value) {
-        compile_expr(stmt->value.get());
-    } else {
-        emit_op(OpCode::OP_NIL, stmt->line);
-    }
-    
-    // For now, throw just causes a runtime error
-    // In a full implementation, this would unwind the stack to the nearest catch
-    emit_op(OpCode::OP_THROW, stmt->line);
 }
 
 void Compiler::visit(FuncDeclStmt* stmt) {
@@ -2246,13 +2328,29 @@ void Compiler::visit(FuncDeclStmt* stmt) {
     function_compiler.generic_function_templates_ = generic_function_templates_;
     function_compiler.method_return_types_ = method_return_types_;
 
+    // Set expected function flag if this function has expected error type
+    if (stmt->expected_error_type.has_value()) {
+        function_compiler.in_expected_function_ = true;
+    }
+
     if (stmt->body) {
         for (const auto& statement : stmt->body->statements) {
             function_compiler.compile_stmt(statement.get());
         }
     }
 
-    function_compiler.emit_op(OpCode::OP_NIL, stmt->line);
+    // Implicit return: wrap nil in $Expected.value(nil) for expected functions
+    if (function_compiler.in_expected_function_) {
+        function_compiler.emit_variable_get("$Expected", stmt->line);
+        size_t name_idx = function_compiler.identifier_constant("value");
+        function_compiler.emit_op(OpCode::OP_GET_PROPERTY, stmt->line);
+        function_compiler.emit_short(static_cast<uint16_t>(name_idx), stmt->line);
+        function_compiler.emit_op(OpCode::OP_NIL, stmt->line);
+        function_compiler.emit_op(OpCode::OP_CALL, stmt->line);
+        function_compiler.emit_short(1, stmt->line);
+    } else {
+        function_compiler.emit_op(OpCode::OP_NIL, stmt->line);
+    }
     function_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
 
     proto.chunk = finalize_function_chunk(std::move(function_compiler.chunk_));
@@ -3539,6 +3637,10 @@ Assembly Compiler::compile_function_body(const FuncDeclStmt& stmt) {
     function_compiler.scope_depth_ = 1;
     function_compiler.recursion_depth_ = 0;
 
+    if (stmt.expected_error_type.has_value()) {
+        function_compiler.in_expected_function_ = true;
+    }
+
     for (const auto& param : stmt.params) {
         function_compiler.declare_local(param.internal_name, param.type.is_optional);
         function_compiler.mark_local_initialized();
@@ -3550,7 +3652,17 @@ Assembly Compiler::compile_function_body(const FuncDeclStmt& stmt) {
         }
     }
 
-    function_compiler.emit_op(OpCode::OP_NIL, stmt.line);
+    if (function_compiler.in_expected_function_) {
+        function_compiler.emit_variable_get("$Expected", stmt.line);
+        size_t name_idx = function_compiler.identifier_constant("value");
+        function_compiler.emit_op(OpCode::OP_GET_PROPERTY, stmt.line);
+        function_compiler.emit_short(static_cast<uint16_t>(name_idx), stmt.line);
+        function_compiler.emit_op(OpCode::OP_NIL, stmt.line);
+        function_compiler.emit_op(OpCode::OP_CALL, stmt.line);
+        function_compiler.emit_short(1, stmt.line);
+    } else {
+        function_compiler.emit_op(OpCode::OP_NIL, stmt.line);
+    }
     function_compiler.emit_op(OpCode::OP_RETURN, stmt.line);
     function_compiler.chunk_.expand_to_assembly();
     record_method_body("", stmt.name, false, extract_param_types(stmt.params), function_compiler.chunk_);
@@ -3565,6 +3677,10 @@ Assembly Compiler::compile_struct_method_body(const StructMethodDecl& method, bo
     method_compiler.recursion_depth_ = 0;
     method_compiler.in_struct_method_ = true;
     method_compiler.in_mutating_method_ = is_mutating;
+
+    if (method.expected_error_type.has_value()) {
+        method_compiler.in_expected_function_ = true;
+    }
 
     // self is implicit first parameter
     method_compiler.declare_local("self", false);
@@ -3581,7 +3697,17 @@ Assembly Compiler::compile_struct_method_body(const StructMethodDecl& method, bo
         }
     }
 
-    method_compiler.emit_op(OpCode::OP_NIL, 0);
+    if (method_compiler.in_expected_function_) {
+        method_compiler.emit_variable_get("$Expected", method.line);
+        size_t name_idx = method_compiler.identifier_constant("value");
+        method_compiler.emit_op(OpCode::OP_GET_PROPERTY, method.line);
+        method_compiler.emit_short(static_cast<uint16_t>(name_idx), method.line);
+        method_compiler.emit_op(OpCode::OP_NIL, method.line);
+        method_compiler.emit_op(OpCode::OP_CALL, method.line);
+        method_compiler.emit_short(1, method.line);
+    } else {
+        method_compiler.emit_op(OpCode::OP_NIL, 0);
+    }
     method_compiler.emit_op(OpCode::OP_RETURN, 0);
     method_compiler.chunk_.expand_to_assembly();
     record_method_body("", method.name, method.is_static, extract_param_types(method.params), method_compiler.chunk_);
@@ -4283,10 +4409,20 @@ void Compiler::collect_generic_usages_from_expr(const Expr* expr,
         auto* call = static_cast<const CallExpr*>(expr);
         if (call->callee && call->callee->kind == ExprKind::Identifier) {
             auto* id = static_cast<const IdentifierExpr*>(call->callee.get());
-            if (!id->generic_args.empty() &&
-                generic_function_templates_.count(id->name)) {
-                std::string mangled = mangle_generic_name(id->name, id->generic_args);
-                needed_func_specializations.insert(mangled);
+            if (!id->generic_args.empty()) {
+                if (generic_function_templates_.count(id->name) ||
+                    generic_struct_templates_.count(id->name)) {
+                    std::string mangled = mangle_generic_name(id->name, id->generic_args);
+                    needed_func_specializations.insert(mangled);
+
+                    // Also collect nested generic args
+                    for (const auto& arg : id->generic_args) {
+                        if (!arg.generic_args.empty()) {
+                            std::string nested = mangle_generic_name(arg.name, arg.generic_args);
+                            needed_func_specializations.insert(nested);
+                        }
+                    }
+                }
             }
         }
         // Recurse into callee and arguments
@@ -4329,6 +4465,13 @@ void Compiler::collect_generic_usages_from_stmt(const Stmt* stmt,
     }
     case StmtKind::VarDecl: {
         auto* var_decl = static_cast<const VarDeclStmt*>(stmt);
+        // Check type annotation for generic struct usages
+        if (var_decl->type_annotation.has_value() &&
+            !var_decl->type_annotation->generic_args.empty()) {
+            std::string mangled = mangle_generic_name(var_decl->type_annotation->name,
+                                                       var_decl->type_annotation->generic_args);
+            needed_func_specializations.insert(mangled);
+        }
         collect_generic_usages_from_expr(var_decl->initializer.get(), needed_func_specializations);
         break;
     }
@@ -4586,7 +4729,7 @@ StmtPtr Compiler::create_specialized_func(const FuncDeclStmt* template_decl,
     specialized->generic_constraints.clear();
     specialized->is_override = template_decl->is_override;
     specialized->is_static = template_decl->is_static;
-    specialized->can_throw = template_decl->can_throw;
+    specialized->expected_error_type = template_decl->expected_error_type;
     specialized->access_level = template_decl->access_level;
 
     // Copy parameters with type substitution
@@ -5103,6 +5246,35 @@ NativePropertyBindingInfo Compiler::extract_native_property_attribute(const std:
     }
 
     return result;
+}
+
+void Compiler::emit_expected_enum_definition() {
+    // Emit built-in $Expected enum with .value(_) and .error(_) cases
+    // This reuses the existing EnumCaseObject infrastructure
+    size_t enum_name_idx = identifier_constant("$Expected");
+    emit_op(OpCode::OP_ENUM, 0);
+    emit_short(static_cast<uint16_t>(enum_name_idx), 0);
+
+    // .value case with 1 associated value (label: no label → 0xFFFF)
+    emit_op(OpCode::OP_NIL, 0);  // raw_value placeholder
+    size_t value_name_idx = identifier_constant("value");
+    emit_op(OpCode::OP_ENUM_CASE, 0);
+    emit_short(static_cast<uint16_t>(value_name_idx), 0);
+    emit_byte(1, 0);  // 1 associated value
+    emit_short(std::numeric_limits<uint16_t>::max(), 0);  // no label for the associated value
+
+    // .error case with 1 associated value (label: no label → 0xFFFF)
+    emit_op(OpCode::OP_NIL, 0);  // raw_value placeholder
+    size_t error_name_idx = identifier_constant("error");
+    emit_op(OpCode::OP_ENUM_CASE, 0);
+    emit_short(static_cast<uint16_t>(error_name_idx), 0);
+    emit_byte(1, 0);  // 1 associated value
+    emit_short(std::numeric_limits<uint16_t>::max(), 0);  // no label for the associated value
+
+    // Store as global $Expected
+    emit_op(OpCode::OP_SET_GLOBAL, 0);
+    emit_short(static_cast<uint16_t>(enum_name_idx), 0);
+    emit_op(OpCode::OP_POP, 0);
 }
 
 void Compiler::emit_native_class(const ClassDeclStmt& stmt, const NativeTypeBindingInfo& type_info) {

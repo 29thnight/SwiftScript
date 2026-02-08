@@ -1086,7 +1086,28 @@ namespace swiftscript {
     OPCODE_DEFAULT(OpCode::OP_RETURN);
     OPCODE_DEFAULT(OpCode::OP_READ_LINE);
 	OPCODE_DEFAULT(OpCode::OP_PRINT);
-	OPCODE_DEFAULT(OpCode::OP_THROW);
+	OPCODE(OpCode::OP_UNWRAP_EXPECTED)
+	{
+		OP_BODY
+		{
+			Value top = vm.peek(0);
+			if (top.is_object() && top.as_object() &&
+				top.as_object()->type == ObjectType::EnumCase) {
+				auto* ec = static_cast<EnumCaseObject*>(top.as_object());
+				if (ec->enum_type && ec->enum_type->name == "$Expected") {
+					vm.pop();
+					if (ec->case_name == "value" && !ec->associated_values.empty()) {
+						vm.push(ec->associated_values[0]);
+					} else {
+						// .error case → push nil so OP_JUMP_IF_NIL takes the else branch
+						vm.push(Value::null());
+					}
+					return;
+				}
+			}
+			// Not a $Expected enum → leave as-is (compatible with regular optionals)
+		}
+	};
 	OPCODE_DEFAULT(OpCode::OP_HALT);
 
     OPCODE(OpCode::OP_UNWRAP)

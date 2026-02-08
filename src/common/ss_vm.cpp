@@ -551,15 +551,25 @@ namespace swiftscript {
                 }
                 break;
             }
-            case OpCode::OP_THROW: {
-                // Throw statement - for now, just throw a runtime error
-                Value error_value = pop();
-                std::string error_msg = "Uncaught error: " + error_value.to_string();
-                // Release before throwing
-                if (error_value.is_object() && error_value.ref_type() == RefType::Strong && error_value.as_object()) {
-                    RC::release(this, error_value.as_object());
+            case OpCode::OP_UNWRAP_EXPECTED: {
+                // If top of stack is a $Expected enum case, unwrap it:
+                //   .value(v) → push v
+                //   .error(e) → push nil (so OP_JUMP_IF_NIL takes else branch)
+                // Otherwise leave as-is (compatible with regular optionals)
+                Value top = peek(0);
+                if (top.is_object() && top.as_object() &&
+                    top.as_object()->type == ObjectType::EnumCase) {
+                    auto* ec = static_cast<EnumCaseObject*>(top.as_object());
+                    if (ec->enum_type && ec->enum_type->name == "$Expected") {
+                        pop();
+                        if (ec->case_name == "value" && !ec->associated_values.empty()) {
+                            push(ec->associated_values[0]);
+                        } else {
+                            push(Value::null());
+                        }
+                    }
                 }
-                throw std::runtime_error(error_msg);
+                break;
             }
             case OpCode::OP_HALT:
                 return stack_.empty() ? Value::null() : pop();

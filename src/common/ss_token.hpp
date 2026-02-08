@@ -71,11 +71,7 @@ enum class TokenType {
     As,          // as keyword for type casting
     Is,          // is keyword for type checking
     Where,       // where keyword for filtering
-    Try,         // try keyword for error handling
-    Catch,       // catch keyword for error handling
-    Throw,       // throw keyword for error handling
-    Throws,      // throws keyword for function declaration
-    Do,          // do keyword for try-catch blocks
+    Expected,    // expected keyword for error handling return type
     
     // Operators
     Plus,           // +

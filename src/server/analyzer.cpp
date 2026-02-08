@@ -4,6 +4,7 @@
 #include "lsp_utils.hpp"
 
 #include <set>
+#include <unordered_set>
 
 // SwiftScript headers
 #include "ss_lexer.hpp"
@@ -21,6 +22,11 @@ using swiftscript::ImportStmt;
 using swiftscript::TypeChecker;
 using swiftscript::TypeCheckError;
 using swiftscript::IModuleResolver;
+using swiftscript::FuncDeclStmt;
+using swiftscript::ClassDeclStmt;
+using swiftscript::StructDeclStmt;
+using swiftscript::EnumDeclStmt;
+using swiftscript::ProtocolDeclStmt;
 
 // ─── IModuleResolver adapter ────────────────────────────────
 
@@ -314,7 +320,41 @@ void Analyzer::ComputeSemanticTokens(const std::string& text,
         // checkerReady stays false — we just won't classify identifiers via TypeChecker
     }
 
-    // 3) Build a set of error symbols with their line numbers
+    // 3) Collect generic type parameter names from AST declarations
+    std::unordered_set<std::string> genericParamNames;
+    for (const auto& stmt : program) {
+        if (!stmt) continue;
+        switch (stmt->kind) {
+        case StmtKind::FuncDecl: {
+            auto* d = static_cast<FuncDeclStmt*>(stmt.get());
+            for (const auto& p : d->generic_params) genericParamNames.insert(p);
+            break;
+        }
+        case StmtKind::ClassDecl: {
+            auto* d = static_cast<ClassDeclStmt*>(stmt.get());
+            for (const auto& p : d->generic_params) genericParamNames.insert(p);
+            break;
+        }
+        case StmtKind::StructDecl: {
+            auto* d = static_cast<StructDeclStmt*>(stmt.get());
+            for (const auto& p : d->generic_params) genericParamNames.insert(p);
+            break;
+        }
+        case StmtKind::EnumDecl: {
+            auto* d = static_cast<EnumDeclStmt*>(stmt.get());
+            for (const auto& p : d->generic_params) genericParamNames.insert(p);
+            break;
+        }
+        case StmtKind::ProtocolDecl: {
+            auto* d = static_cast<ProtocolDeclStmt*>(stmt.get());
+            for (const auto& p : d->generic_params) genericParamNames.insert(p);
+            break;
+        }
+        default: break;
+        }
+    }
+
+    // 4) Build a set of error symbols with their line numbers
     //    so we can mark only truly unresolved identifiers as red.
     //    Key = (0-based line, symbol name)
     std::set<std::pair<int, std::string>> errorSymbols;
@@ -395,11 +435,7 @@ void Analyzer::ComputeSemanticTokens(const std::string& text,
         case TokenType::As:
         case TokenType::Is:
         case TokenType::Where:
-        case TokenType::Try:
-        case TokenType::Catch:
-        case TokenType::Throw:
-        case TokenType::Throws:
-        case TokenType::Do:
+        case TokenType::Expected:
             semType = SemanticTokenType::Keyword;
             emit = true;
             break;
@@ -434,6 +470,11 @@ void Analyzer::ComputeSemanticTokens(const std::string& text,
 
             // Known type name (persists after check_no_throw via known_types_)
             if (checkerReady && checker.is_known_type(name)) {
+                semType = SemanticTokenType::Type;
+                emit = true;
+            }
+            // Generic type parameter (T, U, etc.)
+            else if (!genericParamNames.empty() && genericParamNames.count(name)) {
                 semType = SemanticTokenType::Type;
                 emit = true;
             }

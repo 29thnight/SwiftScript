@@ -70,7 +70,8 @@ private:
     IModuleResolver* module_resolver_{nullptr};
     std::unordered_set<std::string> imported_modules_;  // Track imported modules to prevent duplicates
     std::unordered_set<std::string> compiling_modules_; // Track modules being compiled (circular dependency detection)
-    
+    std::unordered_set<std::string> known_protocol_names_;  // Track protocol declarations
+
     // Generic specialization
     std::unordered_map<std::string, const StructDeclStmt*> generic_struct_templates_;
     std::unordered_map<std::string, const FuncDeclStmt*> generic_function_templates_;
@@ -122,6 +123,7 @@ private:
     bool current_class_has_super_{false};
     bool in_struct_method_{false};      // True when compiling struct method
     bool in_mutating_method_{false};    // True when compiling mutating method
+    bool in_expected_function_{false};  // True when compiling function with expected error type
 
     static constexpr int MAX_RECURSION_DEPTH = 256;
     static constexpr size_t MAX_LOCALS = 65535;
@@ -152,7 +154,6 @@ private:
     void visit(ContinueStmt* stmt);
     void visit(SwitchStmt* stmt);
     void visit(BlockStmt* stmt);
-    void visit(ThrowStmt* stmt);
     void visit(ClassDeclStmt* stmt);
     void visit(StructDeclStmt* stmt);  // Struct declaration
     void visit(EnumDeclStmt* stmt);    // Enum declaration
@@ -259,6 +260,7 @@ private:
     NativeTypeBindingInfo extract_native_type_attribute(const std::vector<Attribute>& attrs);
     NativePropertyBindingInfo extract_native_property_attribute(const std::vector<Attribute>& attrs);
     void emit_native_class(const ClassDeclStmt& stmt, const NativeTypeBindingInfo& type_info);
+    void emit_expected_enum_definition();
 
     // Helper classes
     class RecursionGuard {

@@ -220,6 +220,8 @@ size_t Assembly::disassemble_instruction(size_t offset) const {
             return short_instruction("OP_OPTIONAL_CHAIN", offset);
         case OpCode::OP_UNWRAP:
             return simple_instruction("OP_UNWRAP", offset);
+        case OpCode::OP_UNWRAP_EXPECTED:
+            return simple_instruction("OP_UNWRAP_EXPECTED", offset);
         case OpCode::OP_NIL_COALESCE:
             return simple_instruction("OP_NIL_COALESCE", offset);
         case OpCode::OP_RANGE_INCLUSIVE:

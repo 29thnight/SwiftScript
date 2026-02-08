@@ -75,7 +75,6 @@ enum class ExprKind {
     Closure,         // { (params) -> ReturnType in body }
     TypeCast,        // as, as?, as!
     TypeCheck,       // is
-    Try,             // try expression
     TupleLiteral,    // (1, "hello") or (x: 1, y: 2)
     TupleMember,     // tuple.0 or tuple.x
 };
@@ -256,15 +255,6 @@ struct TypeCheckExpr : Expr {
     TypeCheckExpr() : Expr(ExprKind::TypeCheck) {}
 };
 
-// Try expression: try expression
-struct TryExpr : Expr {
-    ExprPtr expression;
-    bool is_optional{false};   // try?
-    bool is_forced{false};     // try!
-    
-    TryExpr() : Expr(ExprKind::Try) {}
-};
-
 // ---- Collection expressions ----
 
 // Array literal: [1, 2, 3]
@@ -366,8 +356,6 @@ enum class StmtKind {
     Return,
     FuncDecl,
     Import,     // Import statement
-    Throw,      // throw statement
-    DoCatch,    // do-catch block
 };
 
 struct Stmt {
@@ -532,26 +520,9 @@ struct SwitchStmt : Stmt {
 
 struct ReturnStmt : Stmt {
     ExprPtr value;
+    bool is_expected_error{false};  // true for 'return expected.error(val)'
     ReturnStmt() : Stmt(StmtKind::Return) {}
     explicit ReturnStmt(ExprPtr v) : Stmt(StmtKind::Return), value(std::move(v)) {}
-};
-
-struct ThrowStmt : Stmt {
-    ExprPtr value;  // Error value to throw
-    ThrowStmt() : Stmt(StmtKind::Throw) {}
-    explicit ThrowStmt(ExprPtr v) : Stmt(StmtKind::Throw), value(std::move(v)) {}
-};
-
-struct CatchClause {
-    std::string binding_name;  // Variable name to bind error (default: "error")
-    std::vector<StmtPtr> statements;
-};
-
-struct DoCatchStmt : Stmt {
-    std::unique_ptr<BlockStmt> try_block;
-    std::vector<CatchClause> catch_clauses;
-    
-    DoCatchStmt() : Stmt(StmtKind::DoCatch) {}
 };
 
 // Generic constraint: T: Comparable
@@ -569,7 +540,7 @@ struct FuncDeclStmt : Stmt {
     std::optional<TypeAnnotation> return_type;
     bool is_override{false};
     bool is_static{false};  // static functions belong to the type
-    bool can_throw{false};  // throws keyword
+    std::optional<TypeAnnotation> expected_error_type;  // expected ErrorType
     AccessLevel access_level{AccessLevel::Internal};  // Default is internal
     FuncDeclStmt() : Stmt(StmtKind::FuncDecl) {}
 };
@@ -600,6 +571,7 @@ struct StructMethodDecl {
     bool is_mutating{false};  // mutating methods can modify self
     bool is_computed_property{false};  // true for var name: Type { }, false for func name()
     bool is_static{false};  // static methods belong to the type, not instances
+    std::optional<TypeAnnotation> expected_error_type;  // expected ErrorType
     AccessLevel access_level{AccessLevel::Internal};  // Default is internal
 };
 

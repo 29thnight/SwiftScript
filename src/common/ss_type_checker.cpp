@@ -347,7 +347,18 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                 }
                 enter_generic_params(decl->generic_params);
                 if (decl->superclass_name.has_value()) {
-                    superclass_map_[decl->name] = decl->superclass_name.value();
+                    const std::string& super_name = decl->superclass_name.value();
+                    auto type_it = known_types_.find(super_name);
+                    if (type_it != known_types_.end() && type_it->second == TypeKind::Protocol) {
+                        // Parser mistakenly classified a protocol as superclass.
+                        // Reclassify as protocol conformance.
+                        auto* mutable_decl = const_cast<ClassDeclStmt*>(decl);
+                        mutable_decl->protocol_conformances.insert(
+                            mutable_decl->protocol_conformances.begin(), super_name);
+                        mutable_decl->superclass_name.reset();
+                    } else {
+                        superclass_map_[decl->name] = super_name;
+                    }
                 }
                 add_protocol_conformance(decl->name, decl->protocol_conformances, decl->line);
                 for (const auto& property : decl->properties) {
@@ -359,6 +370,18 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                         type_from_annotation(property->type_annotation.value(), property->line));
                     // Track access level
                     member_access_levels_[decl->name][property->name] = property->access_level;
+                    // Collect Range constraints from class properties
+                    for (const auto& attr : property->attributes) {
+                        if (attr.name == "Range" && attr.arguments.size() == 2) {
+                            auto* min_lit = dynamic_cast<LiteralExpr*>(attr.arguments[0].get());
+                            auto* max_lit = dynamic_cast<LiteralExpr*>(attr.arguments[1].get());
+                            if (min_lit && max_lit && min_lit->value.is_int() && max_lit->value.is_int()) {
+                                property_range_constraints_[decl->name][property->name] = {
+                                    min_lit->value.as_int(), max_lit->value.as_int()
+                                };
+                            }
+                        }
+                    }
                 }
                 for (const auto& method : decl->methods) {
                     if (!method) {
@@ -430,6 +453,18 @@ void TypeChecker::collect_type_declarations(const std::vector<StmtPtr>& program)
                         type_from_annotation(property->type_annotation.value(), property->line));
                     // Track access level
                     member_access_levels_[decl->name][property->name] = property->access_level;
+                    // Collect Range constraints from struct properties
+                    for (const auto& attr : property->attributes) {
+                        if (attr.name == "Range" && attr.arguments.size() == 2) {
+                            auto* min_lit = dynamic_cast<LiteralExpr*>(attr.arguments[0].get());
+                            auto* max_lit = dynamic_cast<LiteralExpr*>(attr.arguments[1].get());
+                            if (min_lit && max_lit && min_lit->value.is_int() && max_lit->value.is_int()) {
+                                property_range_constraints_[decl->name][property->name] = {
+                                    min_lit->value.as_int(), max_lit->value.as_int()
+                                };
+                            }
+                        }
+                    }
                 }
                 for (const auto& method : decl->methods) {
                     if (!method) {
@@ -812,9 +847,6 @@ void TypeChecker::check_stmt(const Stmt* stmt) {
         case StmtKind::Return:
             check_return_stmt(static_cast<const ReturnStmt*>(stmt));
             break;
-        case StmtKind::Throw:
-            check_throw_stmt(static_cast<const ThrowStmt*>(stmt));
-            break;
         case StmtKind::FuncDecl:
             check_func_decl(static_cast<const FuncDeclStmt*>(stmt));
             break;
@@ -836,9 +868,6 @@ void TypeChecker::check_stmt(const Stmt* stmt) {
             check_extension_decl(static_cast<const ExtensionDeclStmt*>(stmt));
             break;
         case StmtKind::Import:
-            break;
-        case StmtKind::DoCatch:
-            check_do_catch_stmt(static_cast<const DoCatchStmt*>(stmt));
             break;
         case StmtKind::Break:
         case StmtKind::Continue:
@@ -958,9 +987,7 @@ void TypeChecker::check_if_stmt(const IfStmt* stmt) {
 
 void TypeChecker::check_if_let_stmt(const IfLetStmt* stmt) {
     TypeInfo opt_type = check_expr(stmt->optional_expr.get());
-    if (!is_unknown(opt_type) && !opt_type.is_optional) {
-        error("if let requires optional expression", stmt->line);
-    }
+    // Allow optional expressions and expected return values (unwrapped at runtime by OP_UNWRAP_EXPECTED)
     TypeInfo bound = base_type(opt_type);
     enter_scope();
     declare_symbol(stmt->binding_name, bound, stmt->line);
@@ -973,9 +1000,7 @@ void TypeChecker::check_if_let_stmt(const IfLetStmt* stmt) {
 
 void TypeChecker::check_guard_let_stmt(const GuardLetStmt* stmt) {
     TypeInfo opt_type = check_expr(stmt->optional_expr.get());
-    if (!is_unknown(opt_type) && !opt_type.is_optional) {
-        error("guard let requires optional expression", stmt->line);
-    }
+    // Allow optional expressions and expected return values (unwrapped at runtime by OP_UNWRAP_EXPECTED)
     check_stmt(stmt->else_branch.get());
     declare_symbol(stmt->binding_name, base_type(opt_type), stmt->line);
 }
@@ -1050,15 +1075,21 @@ void TypeChecker::check_return_stmt(const ReturnStmt* stmt) {
         return;
     }
 
+    if (stmt->is_expected_error) {
+        // return expected.error(val) — check against the expected error type, not the return type
+        TypeInfo actual = check_expr(stmt->value.get());
+        if (!function_stack_.empty() && function_stack_.back().has_expected_error) {
+            const auto& err_type = function_stack_.back().expected_error_type;
+            if (!is_unknown(err_type) && !is_assignable(err_type, actual)) {
+                error("Expected error type mismatch: expected '" + err_type.name + "'", stmt->line);
+            }
+        }
+        return;
+    }
+
     TypeInfo actual = check_expr(stmt->value.get());
     if (!is_unknown(expected) && !is_assignable(expected, actual)) {
         error("Return type mismatch: expected '" + expected.name + "'", stmt->line);
-    }
-}
-
-void TypeChecker::check_throw_stmt(const ThrowStmt* stmt) {
-    if (stmt->value) {
-        check_expr(stmt->value.get());
     }
 }
 
@@ -1099,7 +1130,13 @@ if (!self_type.empty()) {
 for (size_t i = 0; i < stmt->params.size(); ++i) {
     declare_symbol(stmt->params[i].internal_name, params[i], stmt->line);
 }
-function_stack_.push_back(FunctionContext{return_type});
+FunctionContext func_ctx;
+func_ctx.return_type = return_type;
+if (stmt->expected_error_type.has_value()) {
+    func_ctx.has_expected_error = true;
+    func_ctx.expected_error_type = type_from_annotation(stmt->expected_error_type.value(), stmt->line);
+}
+function_stack_.push_back(func_ctx);
 
 // Check if this is a native function (has [Native.InternalCall] attribute)
 bool is_native_function = false;
@@ -1124,7 +1161,14 @@ void TypeChecker::check_class_decl(const ClassDeclStmt* stmt) {
     if (stmt->superclass_name.has_value()) {
         const std::string& superclass = stmt->superclass_name.value();
         auto it = known_types_.find(superclass);
-        if (it == known_types_.end() || it->second != TypeKind::User) {
+        if (it != known_types_.end() && it->second == TypeKind::Protocol) {
+            // Parser mistakenly classified a protocol as superclass (heuristic).
+            // Silently treat it as a protocol conformance instead.
+            auto* mutable_stmt = const_cast<ClassDeclStmt*>(stmt);
+            mutable_stmt->protocol_conformances.insert(
+                mutable_stmt->protocol_conformances.begin(), superclass);
+            mutable_stmt->superclass_name.reset();
+        } else if (it == known_types_.end() || it->second != TypeKind::User) {
             error("Unknown superclass '" + superclass + "'", stmt->line);
         }
     }
@@ -1186,7 +1230,13 @@ void TypeChecker::check_struct_decl(const StructDeclStmt* stmt) {
         if (method->return_type.has_value()) {
             return_type = type_from_annotation(method->return_type.value(), stmt->line);
         }
-        function_stack_.push_back(FunctionContext{return_type});
+        FunctionContext method_ctx;
+        method_ctx.return_type = return_type;
+        if (method->expected_error_type.has_value()) {
+            method_ctx.has_expected_error = true;
+            method_ctx.expected_error_type = type_from_annotation(method->expected_error_type.value(), stmt->line);
+        }
+        function_stack_.push_back(method_ctx);
         check_block(method->body.get());
         function_stack_.pop_back();
         exit_scope();
@@ -1227,7 +1277,13 @@ void TypeChecker::check_enum_decl(const EnumDeclStmt* stmt) {
         if (method->return_type.has_value()) {
             return_type = type_from_annotation(method->return_type.value(), stmt->line);
         }
-        function_stack_.push_back(FunctionContext{return_type});
+        FunctionContext method_ctx;
+        method_ctx.return_type = return_type;
+        if (method->expected_error_type.has_value()) {
+            method_ctx.has_expected_error = true;
+            method_ctx.expected_error_type = type_from_annotation(method->expected_error_type.value(), stmt->line);
+        }
+        function_stack_.push_back(method_ctx);
         check_block(method->body.get());
         function_stack_.pop_back();
         exit_scope();
@@ -1291,7 +1347,13 @@ void TypeChecker::check_extension_decl(const ExtensionDeclStmt* stmt) {
         if (method->return_type.has_value()) {
             return_type = type_from_annotation(method->return_type.value(), stmt->line);
         }
-        function_stack_.push_back(FunctionContext{return_type});
+        FunctionContext method_ctx;
+        method_ctx.return_type = return_type;
+        if (method->expected_error_type.has_value()) {
+            method_ctx.has_expected_error = true;
+            method_ctx.expected_error_type = type_from_annotation(method->expected_error_type.value(), stmt->line);
+        }
+        function_stack_.push_back(method_ctx);
         check_block(method->body.get());
         function_stack_.pop_back();
         exit_scope();
@@ -1308,22 +1370,6 @@ void TypeChecker::check_attributes(const std::vector<Attribute>& attributes, uin
             error("Unknown attribute '" + attribute.name + "'", attribute.line ? attribute.line : line);
             continue;
         }
-    }
-}
-
-void TypeChecker::check_do_catch_stmt(const DoCatchStmt* stmt) {
-    if (stmt->try_block) {
-        check_block(stmt->try_block.get());
-    }
-    for (const auto& clause : stmt->catch_clauses) {
-        enter_scope();
-        if (!clause.binding_name.empty()) {
-            declare_symbol(clause.binding_name, TypeInfo::unknown(), stmt->line);
-        }
-        for (const auto& nested : clause.statements) {
-            check_stmt(nested.get());
-        }
-        exit_scope();
     }
 }
 
@@ -1369,8 +1415,6 @@ TypeChecker::TypeInfo TypeChecker::check_expr(const Expr* expr) {
             return check_type_cast_expr(static_cast<const TypeCastExpr*>(expr));
         case ExprKind::TypeCheck:
             return check_type_check_expr(static_cast<const TypeCheckExpr*>(expr));
-        case ExprKind::Try:
-            return check_try_expr(static_cast<const TryExpr*>(expr));
         case ExprKind::Super:
             return TypeInfo::unknown();
         case ExprKind::TupleLiteral:
@@ -1666,6 +1710,35 @@ TypeChecker::TypeInfo TypeChecker::check_call_expr(const CallExpr* expr) {
             }
             warn(msg, expr->line);
         }
+        // Check Range constraints on literal arguments
+        auto range_it = property_range_constraints_.find(callee.name);
+        if (range_it != property_range_constraints_.end()) {
+            for (size_t i = 0; i < expr->arguments.size(); ++i) {
+                // Match argument name to property name
+                std::string arg_name;
+                if (i < expr->argument_names.size() && !expr->argument_names[i].empty()) {
+                    arg_name = expr->argument_names[i];
+                }
+                if (arg_name.empty()) continue;
+
+                auto prop_range_it = range_it->second.find(arg_name);
+                if (prop_range_it != range_it->second.end()) {
+                    // Check if the argument is a literal
+                    if (expr->arguments[i]->kind == ExprKind::Literal) {
+                        auto* lit = static_cast<const LiteralExpr*>(expr->arguments[i].get());
+                        if (lit->value.is_int()) {
+                            int64_t val = lit->value.as_int();
+                            if (val < prop_range_it->second.min || val > prop_range_it->second.max) {
+                                error("Value " + std::to_string(val) + " out of range [" +
+                                    std::to_string(prop_range_it->second.min) + ", " +
+                                    std::to_string(prop_range_it->second.max) + "] for property '" +
+                                    arg_name + "'", expr->line);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         return callee;  // Return the type itself (e.g., Person() returns Person)
     }
     return TypeInfo::unknown();
@@ -1911,14 +1984,6 @@ TypeChecker::TypeInfo TypeChecker::check_type_check_expr(const TypeCheckExpr* ex
     check_expr(expr->value.get());
     type_from_annotation(expr->target_type, expr->line);
     return TypeInfo::builtin("Bool");
-}
-
-TypeChecker::TypeInfo TypeChecker::check_try_expr(const TryExpr* expr) {
-    TypeInfo inner = check_expr(expr->expression.get());
-    if (expr->is_optional) {
-        return make_optional(inner);
-    }
-    return inner;
 }
 
 TypeChecker::TypeInfo TypeChecker::check_tuple_literal_expr(const TupleLiteralExpr* expr) {

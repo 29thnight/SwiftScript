@@ -11,7 +11,7 @@
 
 namespace swiftscript
 {
-    // .ssasm ���Ͽ��� Chunk�� �о� VM���� ����
+	// .ssasm 파일을 로드하고 실행하는 헬퍼 함수
     inline Value AssmblyRun(VM& vm, const std::string& ssasm_path)
     {
         std::ifstream in(ssasm_path, std::ios::binary);

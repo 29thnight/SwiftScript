@@ -96,7 +96,7 @@ X(OP_TYPE_CAST)
 X(OP_TYPE_CAST_OPTIONAL)
 X(OP_TYPE_CAST_FORCED)
 
-X(OP_THROW)
+X(OP_UNWRAP_EXPECTED)
 
 // Native binding opcodes
 X(OP_NATIVE_CALL)          // Call a native C++ function by name

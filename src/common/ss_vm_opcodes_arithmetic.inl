@@ -106,7 +106,12 @@ namespace swiftscript {
                 }
                 throw std::runtime_error("Operands must be numbers for division.");
             }
-            vm.push(Value::from_float(*fa / *fb));
+            if (a.is_int() && b.is_int()) {
+                vm.push(Value::from_int(a.as_int() / b.as_int()));
+            }
+            else {
+                vm.push(Value::from_float(*fa / *fb));
+            }
         }
     };
 

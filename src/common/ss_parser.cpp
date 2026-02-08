@@ -113,10 +113,16 @@ namespace swiftscript {
             case TokenType::RightBrace:
             case TokenType::RightBracket:
             case TokenType::LeftBrace:
-            case TokenType::Comma:
-            case TokenType::Colon:
             case TokenType::Eof:
                 return false;
+            case TokenType::Comma:
+            case TokenType::Colon:
+                // Comma and colon are valid inside generic brackets (e.g., Pair<Int, String>)
+                // but terminate if we're not inside any brackets
+                if (depth <= 0) {
+                    return false;
+                }
+                break;
             default:
                 break;
             }
@@ -738,6 +744,11 @@ namespace swiftscript {
             stmt->return_type = parse_type_annotation();
         }
 
+        // Optional expected error type: expected ErrorType
+        if (match(TokenType::Expected)) {
+            stmt->expected_error_type = parse_type_annotation();
+        }
+
         // Parse generic constraints: where T: Comparable
         stmt->generic_constraints = parse_generic_constraints(stmt->generic_params);
 
@@ -1040,6 +1051,11 @@ namespace swiftscript {
                     method->return_type = parse_type_annotation();
                 }
 
+                // Optional expected error type: expected ErrorType
+                if (match(TokenType::Expected)) {
+                    method->expected_error_type = parse_type_annotation();
+                }
+
                 // Check if this is a native method (has [Native.InternalCall] attribute)
                 bool is_native_method = false;
                 for (const auto& attr : method->attributes) {
@@ -1218,6 +1234,11 @@ namespace swiftscript {
                 // Optional return type: -> Type
                 if (match(TokenType::Arrow)) {
                     method->return_type = parse_type_annotation();
+                }
+
+                // Optional expected error type: expected ErrorType
+                if (match(TokenType::Expected)) {
+                    method->expected_error_type = parse_type_annotation();
                 }
 
                 // Body
@@ -1527,6 +1548,11 @@ namespace swiftscript {
                     method->return_type = parse_type_annotation();
                 }
 
+                // Optional expected error type: expected ErrorType
+                if (match(TokenType::Expected)) {
+                    method->expected_error_type = parse_type_annotation();
+                }
+
                 // Body
                 method->body = block();
                 stmt->methods.push_back(std::move(method));
@@ -1590,7 +1616,6 @@ namespace swiftscript {
         if (check(TokenType::Break)) return break_statement();
         if (check(TokenType::Continue)) return continue_statement();
         if (check(TokenType::Return)) return return_statement();
-        if (check(TokenType::Throw)) return throw_statement();
         if (check(TokenType::LeftBrace)) {
             auto blk = block();
             return blk;
@@ -1740,27 +1765,24 @@ namespace swiftscript {
         auto stmt = std::make_unique<ReturnStmt>();
         stmt->line = ret_tok.line;
 
+        // Check for 'return expected.error(expr)' pattern
+        if (check(TokenType::Expected)) {
+            advance();  // consume 'expected'
+            consume(TokenType::Dot, "Expected '.' after 'expected' in return statement.");
+            const Token& error_tok = consume(TokenType::Identifier, "Expected 'error' after 'expected.'.");
+            if (error_tok.lexeme != "error") {
+                error(error_tok, "Expected 'error' after 'expected.', got '" + std::string(error_tok.lexeme) + "'.");
+            }
+            consume(TokenType::LeftParen, "Expected '(' after 'expected.error'.");
+            stmt->value = expression();
+            consume(TokenType::RightParen, "Expected ')' after expected error value.");
+            stmt->is_expected_error = true;
+        }
         // Return value is optional
-        if (!check(TokenType::RightBrace) && !check(TokenType::Semicolon) && !is_at_end()) {
+        else if (!check(TokenType::RightBrace) && !check(TokenType::Semicolon) && !is_at_end()) {
             stmt->value = expression();
         }
 
-        match(TokenType::Semicolon);
-        return stmt;
-    }
-
-    StmtPtr Parser::throw_statement() {
-        const Token& throw_tok = advance();  // consume 'throw'
-
-        auto stmt = std::make_unique<ThrowStmt>();
-        stmt->line = throw_tok.line;
-
-        // throw requires a value
-        if (check(TokenType::RightBrace) || check(TokenType::Semicolon) || is_at_end()) {
-            error(throw_tok, "Expected value after 'throw'.");
-        }
-
-        stmt->value = expression();
         match(TokenType::Semicolon);
         return stmt;
     }

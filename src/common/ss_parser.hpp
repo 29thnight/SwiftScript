@@ -47,7 +47,6 @@ namespace swiftscript {
         StmtPtr break_statement();
         StmtPtr continue_statement();
         StmtPtr return_statement();
-        StmtPtr throw_statement();
         StmtPtr print_statement();
         std::unique_ptr<BlockStmt> block();
         StmtPtr expression_statement();
