@@ -1,0 +1,629 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "swive",
+  "scopeName": "source.swive",
+  "fileTypes": [
+    "ss"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#import"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#literals"
+    },
+    {
+      "include": "#functionCalls"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    },
+    {
+      "include": "#typesAndIdentifiers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.swive",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.swive",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.swive",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "meta.interpolation.swive",
+              "begin": "\\$\\{",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.section.interpolation.begin.swive"
+                }
+              },
+              "end": "\\}",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.section.interpolation.end.swive"
+                }
+              },
+              "contentName": "source.swive.embedded",
+              "patterns": [
+                {
+                  "include": "#comments"
+                },
+                {
+                  "include": "#strings"
+                },
+                {
+                  "include": "#numbers"
+                },
+                {
+                  "include": "#literals"
+                },
+                {
+                  "include": "#keywords"
+                },
+                {
+                  "include": "#functionCalls"
+                },
+                {
+                  "include": "#operators"
+                },
+                {
+                  "include": "#punctuation"
+                },
+                {
+                  "include": "#typesAndIdentifiers"
+                }
+              ]
+            },
+            {
+              "name": "constant.character.escape.swive",
+              "match": "\\\\([\"\\\\nrt0]|x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]+\\})"
+            },
+            {
+              "name": "invalid.illegal.escape.swive",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.swive",
+          "match": "\\b\\d+\\.\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.swive",
+          "match": "\\b\\d+\\b"
+        }
+      ]
+    },
+    "literals": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.swive",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.swive",
+          "match": "\\b(nil|null)\\b"
+        },
+        {
+          "name": "variable.language.self.swive",
+          "match": "\\b(self|super)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.flow.swive",
+          "match": "\\b(if|else|switch|case|default|for|while|repeat|break|continue|return|guard|in|where)\\b"
+        },
+        {
+          "name": "keyword.other.import.swive",
+          "match": "\\bimport\\b"
+        },
+        {
+          "name": "keyword.control.exception.swive",
+          "match": "\\b(try|catch|throw|throws|do)\\b"
+        },
+        {
+          "name": "storage.modifier.access.swive",
+          "match": "\\b(public|private|internal|fileprivate)\\b"
+        },
+        {
+          "name": "storage.modifier.other.swive",
+          "match": "\\b(static|override|mutating|lazy|weak|unowned)\\b"
+        },
+        {
+          "name": "storage.type.declaration.swive",
+          "match": "\\b(class|struct|enum|protocol|extension)\\b"
+        },
+        {
+          "name": "storage.type.function.swive",
+          "match": "\\bfunc\\b"
+        },
+        {
+          "name": "storage.type.variable.swive",
+          "match": "\\b(var|let)\\b"
+        },
+        {
+          "name": "keyword.other.propertyobserver.swive",
+          "match": "\\b(willSet|didSet|get|set)\\b"
+        },
+        {
+          "name": "keyword.operator.typecast.swive",
+          "match": "\\b(as|is)\\b"
+        },
+        {
+          "name": "keyword.other.init.swive",
+          "match": "\\b(init|deinit)\\b"
+        }
+      ]
+    },
+    "import": {
+      "patterns": [
+        {
+          "name": "meta.import.swive",
+          "begin": "^\\s*(import)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.other.import.swive"
+            }
+          },
+          "end": "$",
+          "patterns": [
+            {
+              "name": "entity.name.namespace.swive",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\b"
+            },
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.function.declaration.swive",
+          "begin": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.function.swive"
+            },
+            "2": {
+              "name": "entity.name.function.swive"
+            }
+          },
+          "end": "(?=\\{|$)",
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#genericParameters"
+            },
+            {
+              "name": "variable.parameter.function.swive",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*:)"
+            },
+            {
+              "name": "entity.name.type.swive",
+              "match": "(?<=:)\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)"
+            },
+            {
+              "name": "keyword.operator.arrow.swive",
+              "match": "->"
+            },
+            {
+              "name": "entity.name.type.swive",
+              "match": "(?<=->)\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)"
+            }
+          ]
+        },
+        {
+          "name": "meta.type.declaration.swive",
+          "begin": "\\b(class|struct|enum|protocol|extension)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.declaration.swive"
+            },
+            "2": {
+              "name": "entity.name.type.swive"
+            }
+          },
+          "end": "(?=\\{|$)",
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#genericParameters"
+            }
+          ]
+        },
+        {
+          "name": "meta.variable.declaration.swive",
+          "begin": "\\b(var|let)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.variable.swive"
+            },
+            "2": {
+              "name": "variable.other.readwrite.swive"
+            }
+          },
+          "end": "(?=;|\\n|\\{|$)",
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#functionCalls"
+            },
+            {
+              "name": "entity.name.type.swive",
+              "match": "(?<=:)\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)"
+            }
+          ]
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.optionalchain.swive",
+          "match": "\\?\\."
+        },
+        {
+          "name": "keyword.operator.nilcoalesce.swive",
+          "match": "\\?\\?"
+        },
+        {
+          "name": "keyword.operator.range.inclusive.swive",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.range.exclusive.swive",
+          "match": "\\.\\.<"
+        },
+        {
+          "name": "keyword.operator.range.swive",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.shift.swive",
+          "match": "(<<=|>>=|<<|>>)"
+        },
+        {
+          "name": "keyword.operator.assignment.swive",
+          "match": "(\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|=)"
+        },
+        {
+          "name": "keyword.operator.comparison.swive",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.logical.swive",
+          "match": "(&&|\\|\\|)"
+        },
+        {
+          "name": "keyword.operator.bitwise.swive",
+          "match": "(&|\\||\\^|~)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.swive",
+          "match": "(\\+|\\-|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.ternary.swive",
+          "match": "\\?"
+        },
+        {
+          "name": "keyword.operator.arrow.swive",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.negation.swive",
+          "match": "!"
+        }
+      ]
+    },
+    "functionCallArgs": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#functionCalls"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        },
+        {
+          "include": "#typesAndIdentifiers"
+        }
+      ]
+    },
+    "functionCalls": {
+      "patterns": [
+        {
+          "name": "meta.function-call.generic.swive",
+          "begin": "(?<!\\.)\\b([a-z_][A-Za-z0-9_]*)\\s*(<)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.call.swive"
+            },
+            "2": {
+              "name": "punctuation.definition.generic.begin.swive"
+            }
+          },
+          "end": "(>)\\s*(\\()",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.generic.end.swive"
+            },
+            "2": {
+              "name": "punctuation.section.parens.begin.swive"
+            }
+          },
+          "patterns": [
+            {
+              "name": "punctuation.separator.comma.swive",
+              "match": ","
+            },
+            {
+              "name": "entity.name.type.swive",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+            }
+          ]
+        },
+        {
+          "name": "meta.function-call.member.generic.swive",
+          "begin": "\\.\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(<)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.call.member.swive"
+            },
+            "2": {
+              "name": "punctuation.definition.generic.begin.swive"
+            }
+          },
+          "end": "(>)\\s*(\\()",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.generic.end.swive"
+            },
+            "2": {
+              "name": "punctuation.section.parens.begin.swive"
+            }
+          },
+          "patterns": [
+            {
+              "name": "punctuation.separator.comma.swive",
+              "match": ","
+            },
+            {
+              "name": "entity.name.type.swive",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+            }
+          ]
+        },
+        {
+          "name": "meta.constructor-call.swive",
+          "begin": "\\b([A-Z][A-Za-z0-9_]*)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.type.swive"
+            },
+            "2": {
+              "name": "punctuation.section.parens.begin.swive"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.parens.end.swive"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#functionCallArgs"
+            }
+          ]
+        },
+        {
+          "name": "meta.function-call.member.swive",
+          "begin": "\\.\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.call.member.swive"
+            },
+            "2": {
+              "name": "punctuation.section.parens.begin.swive"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.parens.end.swive"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#functionCallArgs"
+            }
+          ]
+        },
+        {
+          "name": "meta.function-call.free.swive",
+          "begin": "(?<!\\.)\\b([a-z_][A-Za-z0-9_]*)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.call.swive"
+            },
+            "2": {
+              "name": "punctuation.section.parens.begin.swive"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.parens.end.swive"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#functionCallArgs"
+            }
+          ]
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.swive",
+          "match": ","
+        },
+        {
+          "name": "punctuation.terminator.statement.swive",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.separator.colon.swive",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.accessor.dot.swive",
+          "match": "\\."
+        },
+        {
+          "name": "punctuation.section.parens.begin.swive",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.section.parens.end.swive",
+          "match": "\\)"
+        },
+        {
+          "name": "punctuation.section.braces.begin.swive",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.braces.end.swive",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.section.brackets.begin.swive",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.section.brackets.end.swive",
+          "match": "\\]"
+        }
+      ]
+    },
+    "typesAndIdentifiers": {
+      "patterns": [
+        {
+          "name": "entity.name.type.guess.swive",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "variable.other.identifier.swive",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "genericParameters": {
+      "name": "meta.generic.parameters.swive",
+      "begin": "<",
+      "end": ">",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "name": "punctuation.separator.comma.swive",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.colon.swive",
+          "match": ":"
+        },
+        {
+          "name": "entity.name.type.parameter.swive",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

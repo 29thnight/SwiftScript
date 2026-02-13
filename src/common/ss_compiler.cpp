@@ -83,6 +83,19 @@ for (const auto& stmt : specialized_program) {
     emit_op(OpCode::OP_NIL, 0);
     emit_op(OpCode::OP_HALT, 0);
 
+    // Attach debug info to root (primary) method body
+    if (emit_debug_info_) {
+        uint32_t end_offset = static_cast<uint32_t>(chunk_.code_size());
+        for (auto& dl : debug_locals_) {
+            if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+        }
+        auto& primary = chunk_.ensure_primary_body();
+        primary.debug_info = std::make_unique<DebugInfo>();
+        primary.debug_info->function_name = "<main>";
+        primary.debug_info->source_file = current_source_file_;
+        primary.debug_info->locals = std::move(debug_locals_);
+    }
+
     chunk_.expand_to_assembly();
     populate_metadata_tables(specialized_program);
     return chunk_;
@@ -3248,6 +3261,22 @@ void Compiler::end_scope() {
         }
     }
     
+    // Update debug info scope_end_offset for locals going out of scope
+    if (emit_debug_info_) {
+        uint32_t end_offset = static_cast<uint32_t>(chunk_.code_size());
+        for (auto it = locals_.rbegin(); it != locals_.rend(); ++it) {
+            if (it->depth <= scope_depth_) break;
+            // Find matching debug local and set scope end
+            for (auto& dl : debug_locals_) {
+                if (dl.name == it->name && dl.scope_end_offset == 0 &&
+                    dl.slot_index == static_cast<uint16_t>(std::distance(locals_.begin(), it.base()) - 1)) {
+                    dl.scope_end_offset = end_offset;
+                    break;
+                }
+            }
+        }
+    }
+
     // Remove locals from the vector
     while (!locals_.empty() && locals_.back().depth > scope_depth_) {
         if (locals_.back().is_captured) {
@@ -3285,6 +3314,16 @@ void Compiler::declare_local(const std::string& name, bool is_optional) {
     }
 
     locals_.push_back({name, -1, is_optional, false});
+
+    // Record debug symbol info
+    if (emit_debug_info_) {
+        DebugLocalInfo info;
+        info.name = name;
+        info.slot_index = static_cast<uint16_t>(locals_.size() - 1);
+        info.scope_start_offset = static_cast<uint32_t>(chunk_.code_size());
+        info.scope_end_offset = 0; // Will be set in end_scope()
+        debug_locals_.push_back(std::move(info));
+    }
 }
 
 void Compiler::mark_local_initialized() {
@@ -3624,6 +3663,10 @@ body_idx Compiler::store_method_body(const Assembly& body_chunk) {
     body.bytecode = body_chunk.bytecode();
     body.line_info = body_chunk.line_info();
     body.max_stack_depth = 0;
+    // Transfer debug info if present
+    if (!body_chunk.method_bodies.empty() && body_chunk.method_bodies.front().debug_info) {
+        body.debug_info = std::make_unique<DebugInfo>(*body_chunk.method_bodies.front().debug_info);
+    }
     chunk_.method_bodies.push_back(std::move(body));
     return static_cast<body_idx>(chunk_.method_bodies.size() - 1);
 }
@@ -3648,6 +3691,8 @@ Assembly Compiler::compile_function_body(const FuncDeclStmt& stmt) {
     function_compiler.locals_.clear();
     function_compiler.scope_depth_ = 1;
     function_compiler.recursion_depth_ = 0;
+    function_compiler.emit_debug_info_ = emit_debug_info_;
+    function_compiler.current_source_file_ = current_source_file_;
 
     if (stmt.expected_error_type.has_value()) {
         function_compiler.in_expected_function_ = true;
@@ -3676,6 +3721,21 @@ Assembly Compiler::compile_function_body(const FuncDeclStmt& stmt) {
         function_compiler.emit_op(OpCode::OP_NIL, stmt.line);
     }
     function_compiler.emit_op(OpCode::OP_RETURN, stmt.line);
+
+    // Attach debug info to the function's primary method body
+    if (function_compiler.emit_debug_info_) {
+        // Close any unclosed debug locals
+        uint32_t end_offset = static_cast<uint32_t>(function_compiler.chunk_.code_size());
+        for (auto& dl : function_compiler.debug_locals_) {
+            if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+        }
+        auto& primary = function_compiler.chunk_.ensure_primary_body();
+        primary.debug_info = std::make_unique<DebugInfo>();
+        primary.debug_info->function_name = stmt.name;
+        primary.debug_info->source_file = current_source_file_;
+        primary.debug_info->locals = std::move(function_compiler.debug_locals_);
+    }
+
     function_compiler.chunk_.expand_to_assembly();
     record_method_body("", stmt.name, false, extract_param_types(stmt.params), function_compiler.chunk_);
     return std::move(function_compiler.chunk_);
@@ -3689,6 +3749,8 @@ Assembly Compiler::compile_struct_method_body(const StructMethodDecl& method, bo
     method_compiler.recursion_depth_ = 0;
     method_compiler.in_struct_method_ = true;
     method_compiler.in_mutating_method_ = is_mutating;
+    method_compiler.emit_debug_info_ = emit_debug_info_;
+    method_compiler.current_source_file_ = current_source_file_;
 
     if (method.expected_error_type.has_value()) {
         method_compiler.in_expected_function_ = true;
@@ -3721,6 +3783,20 @@ Assembly Compiler::compile_struct_method_body(const StructMethodDecl& method, bo
         method_compiler.emit_op(OpCode::OP_NIL, 0);
     }
     method_compiler.emit_op(OpCode::OP_RETURN, 0);
+
+    // Attach debug info to the struct method body
+    if (method_compiler.emit_debug_info_) {
+        uint32_t end_offset = static_cast<uint32_t>(method_compiler.chunk_.code_size());
+        for (auto& dl : method_compiler.debug_locals_) {
+            if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+        }
+        auto& primary = method_compiler.chunk_.ensure_primary_body();
+        primary.debug_info = std::make_unique<DebugInfo>();
+        primary.debug_info->function_name = method.name;
+        primary.debug_info->source_file = current_source_file_;
+        primary.debug_info->locals = std::move(method_compiler.debug_locals_);
+    }
+
     method_compiler.chunk_.expand_to_assembly();
     record_method_body("", method.name, method.is_static, extract_param_types(method.params), method_compiler.chunk_);
     return std::move(method_compiler.chunk_);

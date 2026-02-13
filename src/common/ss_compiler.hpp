@@ -74,6 +74,8 @@ public:
     // Set base directory for resolving relative import paths
     void set_base_directory(const std::string& dir) { base_directory_ = dir; }
     void set_module_resolver(IModuleResolver* r) { module_resolver_ = r; }
+    void set_emit_debug_info(bool enabled) { emit_debug_info_ = enabled; }
+    void set_source_file(const std::string& path) { current_source_file_ = path; }
 
 private:
     Assembly chunk_;
@@ -135,6 +137,9 @@ private:
     bool in_struct_method_{false};      // True when compiling struct method
     bool in_mutating_method_{false};    // True when compiling mutating method
     bool in_expected_function_{false};  // True when compiling function with expected error type
+    bool emit_debug_info_{false};       // True when emitting debug symbol information
+    std::vector<DebugLocalInfo> debug_locals_; // Debug info for locals (only when emit_debug_info_)
+    std::string current_source_file_;   // Source file path for debug info
 
     static constexpr int MAX_RECURSION_DEPTH = 256;
     static constexpr size_t MAX_LOCALS = 65535;

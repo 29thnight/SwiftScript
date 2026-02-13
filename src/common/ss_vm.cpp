@@ -11,6 +11,7 @@
 
 #include "pch.h"
 #include "ss_vm.hpp"
+#include "ss_debug.hpp"
 
 namespace swive {
 
@@ -381,7 +382,7 @@ namespace swive {
                     case OpCode::OP_PRINT: {
                         Value val = stack_.back();
                         stack_.pop_back();
-                        std::cout << val.to_string() << '\n';
+                        write_output(val.to_string() + "\n");
                         // Release the printed value
                         if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
                             RC::release(this, val.as_object());
@@ -474,10 +475,18 @@ namespace swive {
         return result;
     }
 
-    Value VM::run() 
+    Value VM::run()
     {
-        while(true) 
+        while(true)
         {
+            // Debug hook: check for breakpoints/steps at instruction boundary
+            if (debug_controller_ && current_body_) {
+                if (debug_controller_->on_instruction(*this, ip_,
+                        current_body_idx_, current_body_)) {
+                    // Callback invoked; resume/step state already updated
+                }
+            }
+
             OpCode op = static_cast<OpCode>(read_byte());
             auto handler = g_opcode_handlers[static_cast<uint8_t>(op)];
             if (!handler)
@@ -544,7 +553,7 @@ namespace swive {
             case OpCode::OP_PRINT: 
             {
                 Value val = pop();
-                std::cout << val.to_string() << '\n';
+                write_output(val.to_string() + "\n");
                 // Release the printed value
                 if (val.is_object() && val.ref_type() == RefType::Strong && val.as_object()) {
                     RC::release(this, val.as_object());
@@ -1565,7 +1574,7 @@ namespace swive {
                     case OpCode::OP_PRINT: {
                         ip_++;  // consume OPCODE
                         Value val = pop();
-                        std::cout << val.to_string() << "\n";
+                        write_output(val.to_string() + "\n");
                         break;
                     }
                     case OpCode::OP_POP:

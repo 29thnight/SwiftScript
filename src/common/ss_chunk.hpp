@@ -146,10 +146,52 @@ struct PropertyDef {
     method_idx setter{0};
 };
 
+// Debug information for a single local variable
+struct DebugLocalInfo {
+    std::string name;
+    uint16_t slot_index{0};           // Stack slot relative to frame base
+    uint32_t scope_start_offset{0};   // Bytecode offset where variable becomes live
+    uint32_t scope_end_offset{0};     // Bytecode offset where variable goes out of scope
+    std::string type_name;            // Type hint (optional)
+};
+
+// Debug information for a method body
+struct DebugInfo {
+    std::vector<DebugLocalInfo> locals;
+    std::string function_name;
+    std::string source_file;
+};
+
 struct MethodBody {
     std::vector<uint8_t> bytecode;
     std::vector<uint32_t> line_info;
     uint32_t max_stack_depth{0};
+    std::unique_ptr<DebugInfo> debug_info; // null when debug is disabled
+
+    MethodBody() = default;
+    MethodBody(MethodBody&&) = default;
+    MethodBody& operator=(MethodBody&&) = default;
+
+    // Deep copy (needed because unique_ptr is non-copyable)
+    MethodBody(const MethodBody& other)
+        : bytecode(other.bytecode)
+        , line_info(other.line_info)
+        , max_stack_depth(other.max_stack_depth)
+        , debug_info(other.debug_info
+              ? std::make_unique<DebugInfo>(*other.debug_info)
+              : nullptr) {}
+
+    MethodBody& operator=(const MethodBody& other) {
+        if (this != &other) {
+            bytecode = other.bytecode;
+            line_info = other.line_info;
+            max_stack_depth = other.max_stack_depth;
+            debug_info = other.debug_info
+                ? std::make_unique<DebugInfo>(*other.debug_info)
+                : nullptr;
+        }
+        return *this;
+    }
 };
 
 // Bytecode assembly

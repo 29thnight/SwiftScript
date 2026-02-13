@@ -1,0 +1,7 @@
+<Project>
+    <Entry>Scripts/main.ss</Entry>
+    <ImportRoots>
+        <Root>Libs</Root>
+        <Root>Scripts</Root>
+    </ImportRoots>
+</Project>

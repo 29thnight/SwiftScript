@@ -154,6 +154,7 @@
     <ClInclude Include="..\..\src\common\ss_chunk.hpp" />
     <ClInclude Include="..\..\src\common\ss_compiler.hpp" />
     <ClInclude Include="..\..\src\common\ss_core.hpp" />
+    <ClInclude Include="..\..\src\common\ss_debug.hpp" />
     <ClInclude Include="..\..\src\common\ss_lexer.hpp" />
     <ClInclude Include="..\..\src\common\ss_native_convert.hpp" />
     <ClInclude Include="..\..\src\common\ss_native_registry.hpp" />
@@ -179,6 +180,7 @@
     <ClCompile Include="..\..\src\common\ss_chunk.cpp" />
     <ClCompile Include="..\..\src\common\ss_compiler.cpp" />
     <ClCompile Include="..\..\src\common\ss_core.cpp" />
+    <ClCompile Include="..\..\src\common\ss_debug.cpp" />
     <ClCompile Include="..\..\src\common\ss_lexer.cpp" />
     <ClCompile Include="..\..\src\common\ss_native_convert.cpp" />
     <ClCompile Include="..\..\src\common\ss_native_registry.cpp" />

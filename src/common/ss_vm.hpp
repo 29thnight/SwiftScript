@@ -12,12 +12,15 @@
 #pragma once
 #include <limits>
 #include <array>
+#include <functional>
 #include <unordered_map>
 #include "ss_core.hpp"
 #include "ss_value.hpp"
 #include "ss_chunk.hpp"
 
 namespace swive {
+
+class DebugController;
     // Primary OpCodeHandler template. Specializations in
     // `ss_vm_opcodes.inl` override `execute`. The primary implementation
     // provides a default that throws for unhandled opcodes.
@@ -72,6 +75,12 @@ namespace swive {
         // Counters
         uint32_t rc_operations_{ 0 };
 
+        // Debug support
+        DebugController* debug_controller_{ nullptr };
+
+        // Output redirection (for DAP mode)
+        std::function<void(const std::string&)> output_handler_;
+
         void record_deallocation(const Object& obj);
 
     public:
@@ -107,6 +116,28 @@ namespace swive {
         bool has_global(const std::string& name) const;
 
         bool is_builtin_type_name(const std::string& name) const;
+
+        // Debug support
+        void attach_debugger(DebugController* controller) { debug_controller_ = controller; }
+        void detach_debugger() { debug_controller_ = nullptr; }
+        DebugController* debugger() const { return debug_controller_; }
+
+        // Output redirection (for DAP: redirect print to output events)
+        void set_output_handler(std::function<void(const std::string&)> handler) {
+            output_handler_ = std::move(handler);
+        }
+        void write_output(const std::string& text) {
+            if (output_handler_) output_handler_(text);
+            else std::cout << text;
+        }
+
+        // Read-only accessors for debug inspection
+        const std::vector<CallFrame>& call_frames() const { return call_frames_; }
+        const std::vector<Value>& stack() const { return stack_; }
+        size_t current_ip() const { return ip_; }
+        body_idx current_body_index() const { return current_body_idx_; }
+        const MethodBody* current_method_body() const { return current_body_; }
+        const Assembly* current_chunk() const { return chunk_; }
 
         // Execution control
         void record_rc_operation();

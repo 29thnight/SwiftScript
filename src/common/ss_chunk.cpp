@@ -477,6 +477,23 @@ void Assembly::serialize(std::ostream& out) const
             WriteVectorPOD(out, b.bytecode);
             WriteVectorPOD(out, b.line_info);
             WritePOD(out, b.max_stack_depth);
+
+            // DebugInfo (optional)
+            uint8_t has_debug = b.debug_info ? 1 : 0;
+            WritePOD(out, has_debug);
+            if (b.debug_info) {
+                WriteString(out, b.debug_info->function_name);
+                WriteString(out, b.debug_info->source_file);
+                uint32_t lc = (uint32_t)b.debug_info->locals.size();
+                WritePOD(out, lc);
+                for (const auto& dl : b.debug_info->locals) {
+                    WriteString(out, dl.name);
+                    WritePOD(out, dl.slot_index);
+                    WritePOD(out, dl.scope_start_offset);
+                    WritePOD(out, dl.scope_end_offset);
+                    WriteString(out, dl.type_name);
+                }
+            }
         }
     }
 
@@ -899,6 +916,26 @@ Assembly Assembly::deserialize(std::istream& in)
                 body.bytecode = ReadVectorPOD<uint8_t>(in);
                 body.line_info = ReadVectorPOD<uint32_t>(in);
                 body.max_stack_depth = ReadPOD<uint32_t>(in);
+
+                // DebugInfo (optional)
+                uint8_t has_debug = ReadPOD<uint8_t>(in);
+                if (has_debug) {
+                    body.debug_info = std::make_unique<DebugInfo>();
+                    body.debug_info->function_name = ReadString(in);
+                    body.debug_info->source_file = ReadString(in);
+                    uint32_t lc = ReadPOD<uint32_t>(in);
+                    body.debug_info->locals.reserve(lc);
+                    for (uint32_t j = 0; j < lc; ++j) {
+                        DebugLocalInfo dl;
+                        dl.name = ReadString(in);
+                        dl.slot_index = ReadPOD<uint16_t>(in);
+                        dl.scope_start_offset = ReadPOD<uint32_t>(in);
+                        dl.scope_end_offset = ReadPOD<uint32_t>(in);
+                        dl.type_name = ReadString(in);
+                        body.debug_info->locals.push_back(std::move(dl));
+                    }
+                }
+
                 c.method_bodies.push_back(std::move(body));
             }
         }

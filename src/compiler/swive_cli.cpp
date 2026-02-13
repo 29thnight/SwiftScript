@@ -101,6 +101,8 @@ int compile_project(const std::filesystem::path& project_path,
     Compiler compiler;
     compiler.set_base_directory(project.project_dir.string());
     compiler.set_module_resolver(&resolver);
+    compiler.set_source_file(project.entry_file.string());
+    compiler.set_emit_debug_info(build_type == "Debug");
 
     Assembly chunk = compiler.compile(program);
 

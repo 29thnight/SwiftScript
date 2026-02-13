@@ -28,6 +28,7 @@
 #include "ss_type_checker.hpp"
 #include "ss_native_registry.hpp"
 #include "ss_native_convert.hpp"
+#include "ss_debug.hpp"
 
 using namespace swive;
 
@@ -76,6 +77,14 @@ struct SSContext_ {
     // Track engine-owned NativeObject wrappers by native_ptr
     // Used for ss_invalidate_native() to find and null-out wrappers
     std::unordered_multimap<void*, NativeObject*> engine_owned_objects;
+
+    // Debug support
+    std::unique_ptr<DebugController> debug_controller;
+    SSDebugCallback debug_callback{ nullptr };
+    void* debug_user_data{ nullptr };
+
+    // Thread-local storage for debug frame strings (kept alive during callback)
+    std::vector<std::string> debug_frame_strings;
 
     void track_engine_object(void* native_ptr, NativeObject* wrapper) {
         engine_owned_objects.emplace(native_ptr, wrapper);
@@ -852,6 +861,216 @@ SS_API void* ss_get_native_ptr(SSContext context, SSValue value) {
 
     NativeObject* native_obj = static_cast<NativeObject*>(obj);
     return native_obj->native_ptr;  // nullptr if invalidated
+}
+
+/* ============================================================================
+ * Debug API Implementation
+ * ============================================================================ */
+
+SS_API SSResult ss_debug_enable(SSContext context) {
+    if (!context) return SS_ERROR_INVALID_ARG;
+
+    if (context->debug_controller) {
+        return SS_OK; // Already enabled
+    }
+
+    try {
+        context->debug_controller = std::make_unique<DebugController>();
+        context->vm->attach_debugger(context->debug_controller.get());
+        return SS_OK;
+    }
+    catch (const std::exception& e) {
+        context->set_error(SS_ERROR_RUNTIME, e.what());
+        return SS_ERROR_RUNTIME;
+    }
+}
+
+SS_API void ss_debug_set_callback(SSContext context,
+                                  SSDebugCallback callback,
+                                  void* user_data) {
+    if (!context || !context->debug_controller) return;
+
+    context->debug_callback = callback;
+    context->debug_user_data = user_data;
+
+    if (callback) {
+        // Bridge: convert C++ DebugCallback to C SSDebugCallback
+        SSContext captured_ctx = context;
+        context->debug_controller->set_callback(
+            [captured_ctx](DebugEvent event, const DebugFrame& frame) {
+                if (!captured_ctx->debug_callback) return;
+
+                // Keep strings alive for the duration of the callback
+                captured_ctx->debug_frame_strings.clear();
+                captured_ctx->debug_frame_strings.push_back(frame.function_name);
+                captured_ctx->debug_frame_strings.push_back(frame.source_file);
+
+                SSDebugFrame c_frame;
+                c_frame.function_name = captured_ctx->debug_frame_strings[0].c_str();
+                c_frame.source_file = captured_ctx->debug_frame_strings[1].c_str();
+                c_frame.line = static_cast<int>(frame.line);
+                c_frame.frame_index = static_cast<int>(frame.frame_index);
+
+                SSDebugEvent c_event = (event == DebugEvent::BreakpointHit)
+                    ? SS_DEBUG_BREAKPOINT_HIT
+                    : SS_DEBUG_STEP_COMPLETED;
+
+                captured_ctx->debug_callback(captured_ctx, c_event, &c_frame,
+                                             captured_ctx->debug_user_data);
+            }
+        );
+    }
+    else {
+        context->debug_controller->set_callback(nullptr);
+    }
+}
+
+SS_API int ss_debug_add_breakpoint(SSContext context,
+                                   int line,
+                                   const char* source_file) {
+    if (!context || !context->debug_controller || line <= 0) return 0;
+
+    std::string file = source_file ? source_file : "";
+    uint32_t bp_id = context->debug_controller->add_breakpoint(
+        static_cast<uint32_t>(line), file);
+    return static_cast<int>(bp_id);
+}
+
+SS_API SSResult ss_debug_remove_breakpoint(SSContext context, int breakpoint_id) {
+    if (!context || !context->debug_controller) return SS_ERROR_INVALID_ARG;
+
+    bool removed = context->debug_controller->remove_breakpoint(
+        static_cast<uint32_t>(breakpoint_id));
+    return removed ? SS_OK : SS_ERROR_NOT_FOUND;
+}
+
+SS_API void ss_debug_clear_breakpoints(SSContext context) {
+    if (!context || !context->debug_controller) return;
+    context->debug_controller->clear_all_breakpoints();
+}
+
+SS_API void ss_debug_step_over(SSContext context) {
+    if (!context || !context->debug_controller) return;
+    context->debug_controller->step_over();
+}
+
+SS_API void ss_debug_step_into(SSContext context) {
+    if (!context || !context->debug_controller) return;
+    context->debug_controller->step_into();
+}
+
+SS_API void ss_debug_step_out(SSContext context) {
+    if (!context || !context->debug_controller) return;
+    context->debug_controller->step_out();
+}
+
+SS_API void ss_debug_resume(SSContext context) {
+    if (!context || !context->debug_controller) return;
+    context->debug_controller->resume();
+}
+
+SS_API int ss_debug_get_stack_depth(SSContext context) {
+    if (!context || !context->debug_controller || !context->vm) return 0;
+
+    auto trace = context->debug_controller->get_stack_trace(*context->vm);
+    return static_cast<int>(trace.size());
+}
+
+SS_API SSResult ss_debug_get_frame(SSContext context,
+                                   int depth,
+                                   SSDebugFrame* out_frame) {
+    if (!context || !context->debug_controller || !out_frame) return SS_ERROR_INVALID_ARG;
+    if (depth < 0) return SS_ERROR_INVALID_ARG;
+
+    auto trace = context->debug_controller->get_stack_trace(*context->vm);
+    if (static_cast<size_t>(depth) >= trace.size()) return SS_ERROR_NOT_FOUND;
+
+    const auto& frame = trace[depth];
+
+    // Store strings in context to keep them alive
+    context->debug_frame_strings.clear();
+    context->debug_frame_strings.push_back(frame.function_name);
+    context->debug_frame_strings.push_back(frame.source_file);
+
+    out_frame->function_name = context->debug_frame_strings[0].c_str();
+    out_frame->source_file = context->debug_frame_strings[1].c_str();
+    out_frame->line = static_cast<int>(frame.line);
+    out_frame->frame_index = static_cast<int>(frame.frame_index);
+
+    return SS_OK;
+}
+
+SS_API int ss_debug_get_locals(SSContext context,
+                               int frame_depth,
+                               SSDebugVariable* out_vars,
+                               int max_count) {
+    if (!context || !context->debug_controller || !out_vars || max_count <= 0) return 0;
+    if (frame_depth < 0) return 0;
+
+    auto locals = context->debug_controller->get_locals(
+        *context->vm, static_cast<size_t>(frame_depth));
+
+    int count = static_cast<int>(std::min(locals.size(), static_cast<size_t>(max_count)));
+
+    // Store variable name strings to keep them alive
+    context->debug_frame_strings.clear();
+    context->debug_frame_strings.reserve(count);
+
+    for (int i = 0; i < count; ++i) {
+        context->debug_frame_strings.push_back(locals[i].name);
+        out_vars[i].name = context->debug_frame_strings.back().c_str();
+        out_vars[i].value = internal_to_ssvalue(locals[i].value);
+        out_vars[i].slot = static_cast<int>(locals[i].slot);
+    }
+
+    return count;
+}
+
+SS_API SSResult ss_compile_debug(SSContext context,
+                                 const char* source,
+                                 const char* source_name,
+                                 SSScript* out_script) {
+    if (!context || !source || !out_script) return SS_ERROR_INVALID_ARG;
+    context->clear_error();
+
+    try {
+        Lexer lexer(source);
+        auto tokens = lexer.tokenize_all();
+
+        Parser parser(std::move(tokens));
+        auto program = parser.parse();
+
+        Compiler compiler;
+        compiler.set_emit_debug_info(true);
+
+        if (!context->base_directory.empty()) {
+            compiler.set_base_directory(context->base_directory);
+        }
+
+        Assembly chunk = compiler.compile(program);
+
+        // Set source file name in all method bodies with debug info
+        if (source_name) {
+            for (auto& body : chunk.method_bodies) {
+                if (body.debug_info) {
+                    body.debug_info->source_file = source_name;
+                }
+            }
+        }
+
+        auto* script = new SSScript_();
+        script->assembly = std::move(chunk);
+        *out_script = script;
+        return SS_OK;
+    }
+    catch (const CompilerError& e) {
+        context->set_error(SS_ERROR_COMPILE, e.what(), e.line());
+        return SS_ERROR_COMPILE;
+    }
+    catch (const std::exception& e) {
+        context->set_error(SS_ERROR_COMPILE, e.what());
+        return SS_ERROR_COMPILE;
+    }
 }
 
 /* ============================================================================

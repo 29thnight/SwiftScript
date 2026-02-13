@@ -1,0 +1,348 @@
+{
+  "name": "swive",
+  "displayName": "Swive",
+  "description": "Swive Script language support (LSP diagnostics)",
+  "version": "0.1.1",
+  "publisher": "ideneb",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/29thnight/Swive"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:swive",
+    "onLanguage:swive-project",
+    "onCommand:swive.compileAndRunProject",
+    "onCommand:swive.stop",
+    "onCommand:swive.addProject",
+    "onDebug:swive"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "resources/ico/Swive.png",
+  "contributes": {
+    "languages": [
+      {
+        "id": "swive",
+        "aliases": [
+          "swive",
+          "swive"
+        ],
+        "extensions": [
+          ".ss"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "swive-project",
+        "aliases": [
+          "swive Project",
+          "swive-project"
+        ],
+        "extensions": [
+          ".ssproject"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "swive",
+        "scopeName": "source.swive",
+        "path": "./syntaxes/swive.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "swive.compileAndRunProject",
+        "title": "swive: Compile && Run",
+        "category": "swive",
+        "icon": {
+          "light": "resources/light/run.svg",
+          "dark": "resources/dark/run.svg"
+        }
+      },
+      {
+        "command": "swive.stop",
+        "title": "swive: Stop",
+        "category": "swive",
+        "icon": {
+          "light": "resources/light/stop.svg",
+          "dark": "resources/dark/stop.svg"
+        }
+      },
+      {
+        "command": "swive.addProject",
+        "title": "Swive: Add Project",
+        "category": "swive"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "swive.addProject",
+          "when": "true"
+        },
+        {
+          "command": "swive.compileAndRunProject",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "swive.stop",
+          "when": "true"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "swive.addProject",
+          "when": "true",
+          "group": "navigation"
+        },
+        {
+          "command": "swive.compileAndRunProject",
+          "when": "(resourceLangId == swive || resourceLangId == swive-project) && workspaceFolderCount > 0",
+          "group": "navigation"
+        },
+        {
+          "command": "swive.stop",
+          "when": "resourceLangId == swive || resourceLangId == swive-project",
+          "group": "navigation"
+        }
+      ]
+    },
+    "semanticTokenTypes": [
+      {
+        "id": "type",
+        "description": "Type names (class, struct, enum, protocol)"
+      },
+      {
+        "id": "function",
+        "description": "Function calls and declarations"
+      },
+      {
+        "id": "variable",
+        "description": "Variables (let/var)"
+      },
+      {
+        "id": "parameter",
+        "description": "Function parameters"
+      },
+      {
+        "id": "property",
+        "description": "Member properties"
+      },
+      {
+        "id": "method",
+        "description": "Member method calls"
+      },
+      {
+        "id": "keyword",
+        "description": "Language keywords"
+      },
+      {
+        "id": "string",
+        "description": "String literals"
+      },
+      {
+        "id": "number",
+        "description": "Numeric literals"
+      },
+      {
+        "id": "enum",
+        "description": "Enum types"
+      },
+      {
+        "id": "enumMember",
+        "description": "Enum cases"
+      },
+      {
+        "id": "namespace",
+        "description": "Module names (import X)"
+      },
+      {
+        "id": "comment",
+        "description": "Comments"
+      },
+      {
+        "id": "unresolve",
+        "description": "Undefined/unresolved symbols"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "swive",
+        "scopes": {
+          "type": [
+            "entity.name.type.swive"
+          ],
+          "function": [
+            "entity.name.function.swive"
+          ],
+          "variable": [
+            "variable.other.swive"
+          ],
+          "parameter": [
+            "variable.parameter.swive"
+          ],
+          "property": [
+            "variable.other.property.swive"
+          ],
+          "method": [
+            "entity.name.function.member.swive"
+          ],
+          "keyword": [
+            "keyword.swive"
+          ],
+          "string": [
+            "string.quoted.double.swive"
+          ],
+          "number": [
+            "constant.numeric.swive"
+          ],
+          "enum": [
+            "entity.name.type.enum.swive"
+          ],
+          "enumMember": [
+            "variable.other.enummember.swive"
+          ],
+          "namespace": [
+            "entity.name.type.module.swive"
+          ],
+          "comment": [
+            "comment.line.swive"
+          ],
+          "unresolve": [
+            "invalid.illegal.unresolved.swive"
+          ]
+        }
+      }
+    ],
+    "configurationDefaults": {
+      "editor.semanticTokenColorCustomizations": {
+        "rules": {
+          "unresolve:swive": {
+            "foreground": "#FF0000",
+            "fontStyle": ""
+          }
+        }
+      }
+    },
+    "configuration": {
+      "title": "swive",
+      "properties": {
+        "swive.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to SwiveServer.exe (LSP). If empty, uses the bundled server in the extension folder."
+        },
+        "swive.swivePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to swive.exe (Unified CLI for build/run/exec). If empty, uses the bundled one in the extension folder."
+        },
+        "swive.buildType": {
+          "type": "string",
+          "default": "Debug",
+          "enum": [
+            "Debug",
+            "Release"
+          ],
+          "description": "Build type used for compilation and bin/<BuildType> output folder."
+        },
+        "swive.trace.server": {
+          "type": "string",
+          "default": "off",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "description": "LSP client trace level."
+        },
+        "swive.debugAdapterPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to SwiveDebugAdapter.exe (DAP). If empty, uses the bundled adapter in the extension folder."
+        }
+      }
+    },
+    "debuggers": [
+      {
+        "type": "swive",
+        "label": "Swive Debug",
+        "languages": [
+          "swive"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to .ssproject file"
+              },
+              "buildType": {
+                "type": "string",
+                "enum": [
+                  "Debug",
+                  "Release"
+                ],
+                "default": "Debug"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "swive",
+            "request": "launch",
+            "name": "Debug Swive",
+            "program": "${workspaceFolder}/MyProject.ssproject",
+            "buildType": "Debug"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Swive: Launch",
+            "description": "Launch and debug a Swive project",
+            "body": {
+              "type": "swive",
+              "request": "launch",
+              "name": "Debug Swive",
+              "program": "^\"${workspaceFolder}/${1:Project}.ssproject\"",
+              "buildType": "Debug"
+            }
+          }
+        ]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "swive"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.7.1",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

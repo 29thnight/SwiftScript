@@ -643,6 +643,108 @@ SS_API SSResult ss_invalidate_native(SSContext context, void* native_ptr);
 SS_API void* ss_get_native_ptr(SSContext context, SSValue value);
 
 /* ============================================================================
+ * Debug API
+ * ============================================================================ */
+
+/** Debug event types */
+typedef enum SSDebugEvent {
+    SS_DEBUG_BREAKPOINT_HIT = 0,
+    SS_DEBUG_STEP_COMPLETED = 1
+} SSDebugEvent;
+
+/** Debug variable info (for inspection) */
+typedef struct SSDebugVariable {
+    const char* name;         /* Variable name (valid during callback only) */
+    SSValue value;
+    int slot;                 /* Stack slot index */
+} SSDebugVariable;
+
+/** Debug stack frame info */
+typedef struct SSDebugFrame {
+    const char* function_name;
+    const char* source_file;
+    int line;
+    int frame_index;
+} SSDebugFrame;
+
+/** Debug event callback */
+typedef void (*SSDebugCallback)(SSContext context,
+                                SSDebugEvent event,
+                                const SSDebugFrame* frame,
+                                void* user_data);
+
+/**
+ * Enable debug mode on a context.
+ * Creates internal DebugController and attaches it to the VM.
+ */
+SS_API SSResult ss_debug_enable(SSContext context);
+
+/** Set debug event callback */
+SS_API void ss_debug_set_callback(SSContext context,
+                                  SSDebugCallback callback,
+                                  void* user_data);
+
+/**
+ * Add a line breakpoint.
+ * @param line        Source line number
+ * @param source_file Source file name (can be NULL for any file)
+ * @return Breakpoint ID (>0), or 0 on error
+ */
+SS_API int ss_debug_add_breakpoint(SSContext context,
+                                   int line,
+                                   const char* source_file);
+
+/** Remove a breakpoint by ID */
+SS_API SSResult ss_debug_remove_breakpoint(SSContext context, int breakpoint_id);
+
+/** Clear all breakpoints */
+SS_API void ss_debug_clear_breakpoints(SSContext context);
+
+/** Step over (next line in current frame) */
+SS_API void ss_debug_step_over(SSContext context);
+
+/** Step into (next line, entering functions) */
+SS_API void ss_debug_step_into(SSContext context);
+
+/** Step out (run until current frame returns) */
+SS_API void ss_debug_step_out(SSContext context);
+
+/** Resume normal execution */
+SS_API void ss_debug_resume(SSContext context);
+
+/** Get current call stack depth */
+SS_API int ss_debug_get_stack_depth(SSContext context);
+
+/**
+ * Get stack frame info at given depth (0 = current/innermost).
+ * Writes result into out_frame.
+ */
+SS_API SSResult ss_debug_get_frame(SSContext context,
+                                   int depth,
+                                   SSDebugFrame* out_frame);
+
+/**
+ * Get local variables for a given frame depth.
+ * @param frame_depth Frame depth (0 = current)
+ * @param out_vars    Caller-provided array
+ * @param max_count   Maximum number of variables to write
+ * @return Actual number of variables written
+ */
+SS_API int ss_debug_get_locals(SSContext context,
+                               int frame_depth,
+                               SSDebugVariable* out_vars,
+                               int max_count);
+
+/**
+ * Compile with debug symbols enabled.
+ * Preserves local variable names in bytecode for inspection.
+ */
+SS_API SSResult ss_compile_debug(SSContext context,
+                                 const char* source,
+                                 const char* source_name,
+                                 SSScript* out_script);
+
+/* ============================================================================
  * Version Information
  * ============================================================================ */
 
