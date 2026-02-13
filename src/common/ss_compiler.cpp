@@ -258,20 +258,34 @@ void Compiler::visit(ClassDeclStmt* stmt) {
             getter_compiler.recursion_depth_ = 0;
             getter_compiler.current_class_properties_ = &property_lookup;
             getter_compiler.allow_implicit_self_property_ = true;
-            
+            getter_compiler.emit_debug_info_ = emit_debug_info_;
+            getter_compiler.current_source_file_ = current_source_file_;
+
             // Add 'self' as local
             getter_compiler.declare_local("self", false);
             getter_compiler.mark_local_initialized();
-            
+
             // Compile getter body
             for (const auto& stmt_in_getter : property->getter_body->statements) {
                 getter_compiler.compile_stmt(stmt_in_getter.get());
             }
-            
+
             // Implicit return nil if no explicit return
             getter_compiler.emit_op(OpCode::OP_NIL, property->line);
             getter_compiler.emit_op(OpCode::OP_RETURN, property->line);
-            
+
+            if (getter_compiler.emit_debug_info_) {
+                uint32_t end_offset = static_cast<uint32_t>(getter_compiler.chunk_.code_size());
+                for (auto& dl : getter_compiler.debug_locals_) {
+                    if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                }
+                auto& primary = getter_compiler.chunk_.ensure_primary_body();
+                primary.debug_info = std::make_unique<DebugInfo>();
+                primary.debug_info->function_name = "get:" + property->name;
+                primary.debug_info->source_file = current_source_file_;
+                primary.debug_info->locals = std::move(getter_compiler.debug_locals_);
+            }
+
             getter_proto.chunk = finalize_function_chunk(std::move(getter_compiler.chunk_));
             record_method_body(stmt->name, getter_proto.name, property->is_static, {}, *getter_proto.chunk);
             size_t getter_idx = chunk_.add_function(std::move(getter_proto));
@@ -296,23 +310,37 @@ void Compiler::visit(ClassDeclStmt* stmt) {
                 setter_compiler.recursion_depth_ = 0;
                 setter_compiler.current_class_properties_ = &property_lookup;
                 setter_compiler.allow_implicit_self_property_ = true;
-                
+                setter_compiler.emit_debug_info_ = emit_debug_info_;
+                setter_compiler.current_source_file_ = current_source_file_;
+
                 // Add 'self' and 'newValue' as locals
                 setter_compiler.declare_local("self", false);
                 setter_compiler.mark_local_initialized();
                 setter_compiler.declare_local("newValue", false);
                 setter_compiler.mark_local_initialized();
-                
+
                 // Compile setter body
                 for (const auto& stmt_in_setter : property->setter_body->statements) {
                     setter_compiler.compile_stmt(stmt_in_setter.get());
                 }
-                
+
                 // Return newValue (parameter 1, after self which is parameter 0)
                 setter_compiler.emit_op(OpCode::OP_GET_LOCAL, property->line);
                 setter_compiler.emit_short(1, property->line);  // newValue is at local index 1
                 setter_compiler.emit_op(OpCode::OP_RETURN, property->line);
-                
+
+                if (setter_compiler.emit_debug_info_) {
+                    uint32_t end_offset = static_cast<uint32_t>(setter_compiler.chunk_.code_size());
+                    for (auto& dl : setter_compiler.debug_locals_) {
+                        if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                    }
+                    auto& primary = setter_compiler.chunk_.ensure_primary_body();
+                    primary.debug_info = std::make_unique<DebugInfo>();
+                    primary.debug_info->function_name = "set:" + property->name;
+                    primary.debug_info->source_file = current_source_file_;
+                    primary.debug_info->locals = std::move(setter_compiler.debug_locals_);
+                }
+
                 setter_proto.chunk = finalize_function_chunk(std::move(setter_compiler.chunk_));
                 record_method_body(stmt->name,
                                    setter_proto.name,
@@ -359,6 +387,8 @@ void Compiler::visit(ClassDeclStmt* stmt) {
                 will_set_compiler.recursion_depth_ = 0;
                 will_set_compiler.current_class_properties_ = &property_lookup;
                 will_set_compiler.allow_implicit_self_property_ = true;
+                will_set_compiler.emit_debug_info_ = emit_debug_info_;
+                will_set_compiler.current_source_file_ = current_source_file_;
 
                 // Add 'self' and 'newValue' as locals
                 will_set_compiler.declare_local("self", false);
@@ -373,6 +403,18 @@ void Compiler::visit(ClassDeclStmt* stmt) {
 
                 will_set_compiler.emit_op(OpCode::OP_NIL, property->line);
                 will_set_compiler.emit_op(OpCode::OP_RETURN, property->line);
+
+                if (will_set_compiler.emit_debug_info_) {
+                    uint32_t end_offset = static_cast<uint32_t>(will_set_compiler.chunk_.code_size());
+                    for (auto& dl : will_set_compiler.debug_locals_) {
+                        if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                    }
+                    auto& primary = will_set_compiler.chunk_.ensure_primary_body();
+                    primary.debug_info = std::make_unique<DebugInfo>();
+                    primary.debug_info->function_name = property->name + "_willSet";
+                    primary.debug_info->source_file = current_source_file_;
+                    primary.debug_info->locals = std::move(will_set_compiler.debug_locals_);
+                }
 
                 will_set_proto.chunk = finalize_function_chunk(std::move(will_set_compiler.chunk_));
                 will_set_idx = static_cast<uint16_t>(chunk_.add_function(std::move(will_set_proto)));
@@ -397,6 +439,8 @@ void Compiler::visit(ClassDeclStmt* stmt) {
                 did_set_compiler.recursion_depth_ = 0;
                 did_set_compiler.current_class_properties_ = &property_lookup;
                 did_set_compiler.allow_implicit_self_property_ = true;
+                did_set_compiler.emit_debug_info_ = emit_debug_info_;
+                did_set_compiler.current_source_file_ = current_source_file_;
 
                 // Add 'self' and 'oldValue' as locals
                 did_set_compiler.declare_local("self", false);
@@ -411,6 +455,18 @@ void Compiler::visit(ClassDeclStmt* stmt) {
 
                 did_set_compiler.emit_op(OpCode::OP_NIL, property->line);
                 did_set_compiler.emit_op(OpCode::OP_RETURN, property->line);
+
+                if (did_set_compiler.emit_debug_info_) {
+                    uint32_t end_offset = static_cast<uint32_t>(did_set_compiler.chunk_.code_size());
+                    for (auto& dl : did_set_compiler.debug_locals_) {
+                        if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                    }
+                    auto& primary = did_set_compiler.chunk_.ensure_primary_body();
+                    primary.debug_info = std::make_unique<DebugInfo>();
+                    primary.debug_info->function_name = property->name + "_didSet";
+                    primary.debug_info->source_file = current_source_file_;
+                    primary.debug_info->locals = std::move(did_set_compiler.debug_locals_);
+                }
 
                 did_set_proto.chunk = finalize_function_chunk(std::move(did_set_compiler.chunk_));
                 did_set_idx = static_cast<uint16_t>(chunk_.add_function(std::move(did_set_proto)));
@@ -515,6 +571,8 @@ void Compiler::visit(ClassDeclStmt* stmt) {
         method_compiler.recursion_depth_ = 0;
         method_compiler.current_class_properties_ = &property_lookup;
         method_compiler.current_class_has_super_ = has_superclass;
+        method_compiler.emit_debug_info_ = emit_debug_info_;
+        method_compiler.current_source_file_ = current_source_file_;
 
         // Static methods don't have 'self' access
         if (!method->is_static) {
@@ -538,6 +596,18 @@ void Compiler::visit(ClassDeclStmt* stmt) {
 
         method_compiler.emit_op(OpCode::OP_NIL, method->line);
         method_compiler.emit_op(OpCode::OP_RETURN, method->line);
+
+        if (method_compiler.emit_debug_info_) {
+            uint32_t end_offset = static_cast<uint32_t>(method_compiler.chunk_.code_size());
+            for (auto& dl : method_compiler.debug_locals_) {
+                if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+            }
+            auto& primary = method_compiler.chunk_.ensure_primary_body();
+            primary.debug_info = std::make_unique<DebugInfo>();
+            primary.debug_info->function_name = method->name;
+            primary.debug_info->source_file = current_source_file_;
+            primary.debug_info->locals = std::move(method_compiler.debug_locals_);
+        }
 
         proto.chunk = finalize_function_chunk(std::move(method_compiler.chunk_));
         record_method_body(stmt->name, proto.name, method->is_static, extract_param_types(method->params), *proto.chunk);
@@ -580,6 +650,8 @@ void Compiler::visit(ClassDeclStmt* stmt) {
         deinit_compiler.current_class_properties_ = &property_lookup;
         deinit_compiler.allow_implicit_self_property_ = true;
         deinit_compiler.current_class_has_super_ = has_superclass;
+        deinit_compiler.emit_debug_info_ = emit_debug_info_;
+        deinit_compiler.current_source_file_ = current_source_file_;
 
         // Implicit self
         deinit_compiler.declare_local("self", false);
@@ -591,6 +663,18 @@ void Compiler::visit(ClassDeclStmt* stmt) {
 
         deinit_compiler.emit_op(OpCode::OP_NIL, stmt->line);
         deinit_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+        if (deinit_compiler.emit_debug_info_) {
+            uint32_t end_offset = static_cast<uint32_t>(deinit_compiler.chunk_.code_size());
+            for (auto& dl : deinit_compiler.debug_locals_) {
+                if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+            }
+            auto& primary = deinit_compiler.chunk_.ensure_primary_body();
+            primary.debug_info = std::make_unique<DebugInfo>();
+            primary.debug_info->function_name = "deinit";
+            primary.debug_info->source_file = current_source_file_;
+            primary.debug_info->locals = std::move(deinit_compiler.debug_locals_);
+        }
 
         proto.chunk = finalize_function_chunk(std::move(deinit_compiler.chunk_));
         record_method_body(stmt->name, proto.name, false, {}, *proto.chunk);
@@ -695,6 +779,8 @@ if (scope_depth_ > 0) {
                 will_set_compiler.recursion_depth_ = 0;
                 will_set_compiler.current_class_properties_ = &property_lookup;
                 will_set_compiler.allow_implicit_self_property_ = true;
+                will_set_compiler.emit_debug_info_ = emit_debug_info_;
+                will_set_compiler.current_source_file_ = current_source_file_;
 
                 // Add 'self' and 'newValue' as locals
                 will_set_compiler.declare_local("self", false);
@@ -709,6 +795,18 @@ if (scope_depth_ > 0) {
 
                 will_set_compiler.emit_op(OpCode::OP_NIL, property->line);
                 will_set_compiler.emit_op(OpCode::OP_RETURN, property->line);
+
+                if (will_set_compiler.emit_debug_info_) {
+                    uint32_t end_offset = static_cast<uint32_t>(will_set_compiler.chunk_.code_size());
+                    for (auto& dl : will_set_compiler.debug_locals_) {
+                        if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                    }
+                    auto& primary = will_set_compiler.chunk_.ensure_primary_body();
+                    primary.debug_info = std::make_unique<DebugInfo>();
+                    primary.debug_info->function_name = property->name + "_willSet";
+                    primary.debug_info->source_file = current_source_file_;
+                    primary.debug_info->locals = std::move(will_set_compiler.debug_locals_);
+                }
 
                 will_set_proto.chunk = finalize_function_chunk(std::move(will_set_compiler.chunk_));
                 will_set_idx = static_cast<uint16_t>(chunk_.add_function(std::move(will_set_proto)));
@@ -733,6 +831,8 @@ if (scope_depth_ > 0) {
                 did_set_compiler.recursion_depth_ = 0;
                 did_set_compiler.current_class_properties_ = &property_lookup;
                 did_set_compiler.allow_implicit_self_property_ = true;
+                did_set_compiler.emit_debug_info_ = emit_debug_info_;
+                did_set_compiler.current_source_file_ = current_source_file_;
 
                 // Add 'self' and 'oldValue' as locals
                 did_set_compiler.declare_local("self", false);
@@ -747,6 +847,18 @@ if (scope_depth_ > 0) {
 
                 did_set_compiler.emit_op(OpCode::OP_NIL, property->line);
                 did_set_compiler.emit_op(OpCode::OP_RETURN, property->line);
+
+                if (did_set_compiler.emit_debug_info_) {
+                    uint32_t end_offset = static_cast<uint32_t>(did_set_compiler.chunk_.code_size());
+                    for (auto& dl : did_set_compiler.debug_locals_) {
+                        if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                    }
+                    auto& primary = did_set_compiler.chunk_.ensure_primary_body();
+                    primary.debug_info = std::make_unique<DebugInfo>();
+                    primary.debug_info->function_name = property->name + "_didSet";
+                    primary.debug_info->source_file = current_source_file_;
+                    primary.debug_info->locals = std::move(did_set_compiler.debug_locals_);
+                }
 
                 did_set_proto.chunk = finalize_function_chunk(std::move(did_set_compiler.chunk_));
                 did_set_idx = static_cast<uint16_t>(chunk_.add_function(std::move(did_set_proto)));
@@ -856,6 +968,8 @@ if (scope_depth_ > 0) {
             method_compiler.locals_.clear();
             method_compiler.scope_depth_ = 1;
             method_compiler.recursion_depth_ = 0;
+            method_compiler.emit_debug_info_ = emit_debug_info_;
+            method_compiler.current_source_file_ = current_source_file_;
 
             // No 'self' for static methods
             for (const auto& param : method->params) {
@@ -871,6 +985,18 @@ if (scope_depth_ > 0) {
 
             method_compiler.emit_op(OpCode::OP_NIL, stmt->line);
             method_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+            if (method_compiler.emit_debug_info_) {
+                uint32_t end_offset = static_cast<uint32_t>(method_compiler.chunk_.code_size());
+                for (auto& dl : method_compiler.debug_locals_) {
+                    if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                }
+                auto& primary = method_compiler.chunk_.ensure_primary_body();
+                primary.debug_info = std::make_unique<DebugInfo>();
+                primary.debug_info->function_name = method->name;
+                primary.debug_info->source_file = current_source_file_;
+                primary.debug_info->locals = std::move(method_compiler.debug_locals_);
+            }
 
             proto.chunk = finalize_function_chunk(std::move(method_compiler.chunk_));
             record_method_body(stmt->name, proto.name, true, extract_param_types(method->params), *proto.chunk);
@@ -926,6 +1052,8 @@ if (scope_depth_ > 0) {
         method_compiler.allow_implicit_self_property_ = true;
         method_compiler.in_struct_method_ = true;
         method_compiler.in_mutating_method_ = method->is_mutating;
+        method_compiler.emit_debug_info_ = emit_debug_info_;
+        method_compiler.current_source_file_ = current_source_file_;
 
         // Implicit self
         method_compiler.declare_local("self", false);
@@ -944,6 +1072,18 @@ if (scope_depth_ > 0) {
 
         method_compiler.emit_op(OpCode::OP_NIL, stmt->line);
         method_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+        if (method_compiler.emit_debug_info_) {
+            uint32_t end_offset = static_cast<uint32_t>(method_compiler.chunk_.code_size());
+            for (auto& dl : method_compiler.debug_locals_) {
+                if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+            }
+            auto& primary = method_compiler.chunk_.ensure_primary_body();
+            primary.debug_info = std::make_unique<DebugInfo>();
+            primary.debug_info->function_name = method->name;
+            primary.debug_info->source_file = current_source_file_;
+            primary.debug_info->locals = std::move(method_compiler.debug_locals_);
+        }
 
         proto.chunk = finalize_function_chunk(std::move(method_compiler.chunk_));
         record_method_body(stmt->name, proto.name, false, extract_param_types(method->params), *proto.chunk);
@@ -1000,6 +1140,8 @@ if (scope_depth_ > 0) {
         init_compiler.allow_implicit_self_property_ = true;
         init_compiler.in_struct_method_ = true;
         init_compiler.in_mutating_method_ = true;  // init can always modify self
+        init_compiler.emit_debug_info_ = emit_debug_info_;
+        init_compiler.current_source_file_ = current_source_file_;
 
         // Implicit self
         init_compiler.declare_local("self", false);
@@ -1018,6 +1160,18 @@ if (scope_depth_ > 0) {
 
         init_compiler.emit_op(OpCode::OP_NIL, init_method->line);
         init_compiler.emit_op(OpCode::OP_RETURN, init_method->line);
+
+        if (init_compiler.emit_debug_info_) {
+            uint32_t end_offset = static_cast<uint32_t>(init_compiler.chunk_.code_size());
+            for (auto& dl : init_compiler.debug_locals_) {
+                if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+            }
+            auto& primary = init_compiler.chunk_.ensure_primary_body();
+            primary.debug_info = std::make_unique<DebugInfo>();
+            primary.debug_info->function_name = "init";
+            primary.debug_info->source_file = current_source_file_;
+            primary.debug_info->locals = std::move(init_compiler.debug_locals_);
+        }
 
         proto.chunk = finalize_function_chunk(std::move(init_compiler.chunk_));
         record_method_body(stmt->name, proto.name, false, extract_param_types(init_method->params), *proto.chunk);
@@ -1132,22 +1286,36 @@ void Compiler::visit(EnumDeclStmt* stmt) {
         getter_compiler.recursion_depth_ = 0;
         getter_compiler.current_class_properties_ = &property_lookup;
         getter_compiler.allow_implicit_self_property_ = true;
-        
+        getter_compiler.emit_debug_info_ = emit_debug_info_;
+        getter_compiler.current_source_file_ = current_source_file_;
+
         // Add 'self' as local
         getter_compiler.declare_local("self", false);
         getter_compiler.mark_local_initialized();
-        
+
         // Compile getter body
         if (method->body) {
             for (const auto& statement : method->body->statements) {
                 getter_compiler.compile_stmt(statement.get());
             }
         }
-        
+
         // Implicit return nil if no explicit return
         getter_compiler.emit_op(OpCode::OP_NIL, stmt->line);
         getter_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
-        
+
+        if (getter_compiler.emit_debug_info_) {
+            uint32_t end_offset = static_cast<uint32_t>(getter_compiler.chunk_.code_size());
+            for (auto& dl : getter_compiler.debug_locals_) {
+                if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+            }
+            auto& primary = getter_compiler.chunk_.ensure_primary_body();
+            primary.debug_info = std::make_unique<DebugInfo>();
+            primary.debug_info->function_name = "get:" + method->name;
+            primary.debug_info->source_file = current_source_file_;
+            primary.debug_info->locals = std::move(getter_compiler.debug_locals_);
+        }
+
         getter_proto.chunk = finalize_function_chunk(std::move(getter_compiler.chunk_));
         record_method_body(stmt->name, getter_proto.name, method->is_static, {}, *getter_proto.chunk);
         getter_proto.upvalues.reserve(getter_compiler.upvalues_.size());
@@ -1196,6 +1364,8 @@ void Compiler::visit(EnumDeclStmt* stmt) {
         method_compiler.recursion_depth_ = 0;
         method_compiler.current_class_properties_ = &property_lookup;
         method_compiler.allow_implicit_self_property_ = true;
+        method_compiler.emit_debug_info_ = emit_debug_info_;
+        method_compiler.current_source_file_ = current_source_file_;
 
         // Implicit self
         method_compiler.declare_local("self", false);
@@ -1214,6 +1384,18 @@ void Compiler::visit(EnumDeclStmt* stmt) {
 
         method_compiler.emit_op(OpCode::OP_NIL, stmt->line);
         method_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+        if (method_compiler.emit_debug_info_) {
+            uint32_t end_offset = static_cast<uint32_t>(method_compiler.chunk_.code_size());
+            for (auto& dl : method_compiler.debug_locals_) {
+                if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+            }
+            auto& primary = method_compiler.chunk_.ensure_primary_body();
+            primary.debug_info = std::make_unique<DebugInfo>();
+            primary.debug_info->function_name = method->name;
+            primary.debug_info->source_file = current_source_file_;
+            primary.debug_info->locals = std::move(method_compiler.debug_locals_);
+        }
 
         proto.chunk = finalize_function_chunk(std::move(method_compiler.chunk_));
         record_method_body(stmt->name, proto.name, method->is_static, extract_param_types(method->params), *proto.chunk);
@@ -2169,21 +2351,35 @@ void Compiler::visit(ExtensionDeclStmt* stmt) {
             Compiler method_compiler;
             method_compiler.enclosing_ = this;
             method_compiler.allow_implicit_self_property_ = true;
-            
+            method_compiler.emit_debug_info_ = emit_debug_info_;
+            method_compiler.current_source_file_ = current_source_file_;
+
             // Allow access to 'self' in computed property getter
             method_compiler.begin_scope();
             method_compiler.declare_local("self", false);
             method_compiler.mark_local_initialized();
-            
+
             // Compile body
             for (const auto& body_stmt : method->body->statements) {
                 method_compiler.compile_stmt(body_stmt.get());
             }
-            
+
             // Implicit return nil if no explicit return
             method_compiler.emit_op(OpCode::OP_NIL, stmt->line);
             method_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
-            
+
+            if (method_compiler.emit_debug_info_) {
+                uint32_t end_offset = static_cast<uint32_t>(method_compiler.chunk_.code_size());
+                for (auto& dl : method_compiler.debug_locals_) {
+                    if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                }
+                auto& primary = method_compiler.chunk_.ensure_primary_body();
+                primary.debug_info = std::make_unique<DebugInfo>();
+                primary.debug_info->function_name = getter_name;
+                primary.debug_info->source_file = current_source_file_;
+                primary.debug_info->locals = std::move(method_compiler.debug_locals_);
+            }
+
             getter_proto.chunk = finalize_function_chunk(std::move(method_compiler.chunk_));
             record_method_body(stmt->extended_type, getter_proto.name, method->is_static, {}, *getter_proto.chunk);
             size_t func_idx = chunk_.add_function(std::move(getter_proto));
@@ -2206,6 +2402,8 @@ void Compiler::visit(ExtensionDeclStmt* stmt) {
             method_compiler.enclosing_ = this;
             method_compiler.in_struct_method_ = method->is_mutating;
             method_compiler.in_mutating_method_ = method->is_mutating;
+            method_compiler.emit_debug_info_ = emit_debug_info_;
+            method_compiler.current_source_file_ = current_source_file_;
 
             method_compiler.begin_scope();
 
@@ -2238,6 +2436,18 @@ void Compiler::visit(ExtensionDeclStmt* stmt) {
             // Implicit return nil if no explicit return
             method_compiler.emit_op(OpCode::OP_NIL, stmt->line);
             method_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+            if (method_compiler.emit_debug_info_) {
+                uint32_t end_offset = static_cast<uint32_t>(method_compiler.chunk_.code_size());
+                for (auto& dl : method_compiler.debug_locals_) {
+                    if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                }
+                auto& primary = method_compiler.chunk_.ensure_primary_body();
+                primary.debug_info = std::make_unique<DebugInfo>();
+                primary.debug_info->function_name = method->name;
+                primary.debug_info->source_file = current_source_file_;
+                primary.debug_info->locals = std::move(method_compiler.debug_locals_);
+            }
 
             func_proto.chunk = finalize_function_chunk(std::move(method_compiler.chunk_));
             record_method_body(stmt->extended_type, func_proto.name, method->is_static, extract_param_types(method->params), *func_proto.chunk);
@@ -2339,6 +2549,8 @@ void Compiler::visit(FuncDeclStmt* stmt) {
     function_compiler.locals_.clear();
     function_compiler.scope_depth_ = 1;
     function_compiler.recursion_depth_ = 0;
+    function_compiler.emit_debug_info_ = emit_debug_info_;
+    function_compiler.current_source_file_ = current_source_file_;
 
     for (const auto& param : stmt->params) {
         function_compiler.declare_local(param.internal_name, param.type.is_optional);
@@ -2377,6 +2589,19 @@ void Compiler::visit(FuncDeclStmt* stmt) {
         function_compiler.emit_op(OpCode::OP_NIL, stmt->line);
     }
     function_compiler.emit_op(OpCode::OP_RETURN, stmt->line);
+
+    // Attach debug info before finalizing
+    if (function_compiler.emit_debug_info_) {
+        uint32_t end_offset = static_cast<uint32_t>(function_compiler.chunk_.code_size());
+        for (auto& dl : function_compiler.debug_locals_) {
+            if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+        }
+        auto& primary = function_compiler.chunk_.ensure_primary_body();
+        primary.debug_info = std::make_unique<DebugInfo>();
+        primary.debug_info->function_name = stmt->name;
+        primary.debug_info->source_file = current_source_file_;
+        primary.debug_info->locals = std::move(function_compiler.debug_locals_);
+    }
 
     proto.chunk = finalize_function_chunk(std::move(function_compiler.chunk_));
     record_method_body("", proto.name, false, extract_param_types(stmt->params), *proto.chunk);
@@ -3176,6 +3401,8 @@ void Compiler::visit(ClosureExpr* expr) {
     closure_compiler.locals_.clear();
     closure_compiler.scope_depth_ = 1;
     closure_compiler.recursion_depth_ = 0;
+    closure_compiler.emit_debug_info_ = emit_debug_info_;
+    closure_compiler.current_source_file_ = current_source_file_;
 
     for (const auto& [param_name, param_type] : expr->params) {
         closure_compiler.declare_local(param_name, param_type.is_optional);
@@ -3188,6 +3415,18 @@ void Compiler::visit(ClosureExpr* expr) {
 
     closure_compiler.emit_op(OpCode::OP_NIL, expr->line);
     closure_compiler.emit_op(OpCode::OP_RETURN, expr->line);
+
+    if (closure_compiler.emit_debug_info_) {
+        uint32_t end_offset = static_cast<uint32_t>(closure_compiler.chunk_.code_size());
+        for (auto& dl : closure_compiler.debug_locals_) {
+            if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+        }
+        auto& primary = closure_compiler.chunk_.ensure_primary_body();
+        primary.debug_info = std::make_unique<DebugInfo>();
+        primary.debug_info->function_name = "<closure>";
+        primary.debug_info->source_file = current_source_file_;
+        primary.debug_info->locals = std::move(closure_compiler.debug_locals_);
+    }
 
     proto.chunk = finalize_function_chunk(std::move(closure_compiler.chunk_));
     proto.upvalues.reserve(closure_compiler.upvalues_.size());
@@ -5209,6 +5448,8 @@ void Compiler::emit_native_function(const FuncDeclStmt& stmt, const NativeCallIn
     function_compiler.locals_.clear();
     function_compiler.scope_depth_ = 1;
     function_compiler.recursion_depth_ = 0;
+    function_compiler.emit_debug_info_ = emit_debug_info_;
+    function_compiler.current_source_file_ = current_source_file_;
 
     // Declare local variables for parameters so the compiler's local table is consistent
     // Even though OP_NATIVE_CALL reads arguments directly from stack, we need locals declared
@@ -5238,6 +5479,18 @@ void Compiler::emit_native_function(const FuncDeclStmt& stmt, const NativeCallIn
 
     // Return the result (native call leaves result on stack)
     function_compiler.emit_op(OpCode::OP_RETURN, stmt.line);
+
+    if (function_compiler.emit_debug_info_ && !function_compiler.debug_locals_.empty()) {
+        uint32_t end_offset = static_cast<uint32_t>(function_compiler.chunk_.code_size());
+        for (auto& dl : function_compiler.debug_locals_) {
+            if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+        }
+        auto& primary = function_compiler.chunk_.ensure_primary_body();
+        primary.debug_info = std::make_unique<DebugInfo>();
+        primary.debug_info->function_name = stmt.name;
+        primary.debug_info->source_file = current_source_file_;
+        primary.debug_info->locals = std::move(function_compiler.debug_locals_);
+    }
 
     // Finalize the function
     proto.chunk = finalize_function_chunk(std::move(function_compiler.chunk_));
@@ -5419,6 +5672,8 @@ void Compiler::emit_native_class(const ClassDeclStmt& stmt, const NativeTypeBind
         getter_compiler.recursion_depth_ = 0;
         getter_compiler.current_class_properties_ = &property_lookup;
         getter_compiler.allow_implicit_self_property_ = true;
+        getter_compiler.emit_debug_info_ = emit_debug_info_;
+        getter_compiler.current_source_file_ = current_source_file_;
 
         getter_compiler.declare_local("self", false);
         getter_compiler.mark_local_initialized();
@@ -5429,6 +5684,18 @@ void Compiler::emit_native_class(const ClassDeclStmt& stmt, const NativeTypeBind
 
         getter_compiler.emit_op(OpCode::OP_NIL, property->line);
         getter_compiler.emit_op(OpCode::OP_RETURN, property->line);
+
+        if (getter_compiler.emit_debug_info_) {
+            uint32_t end_offset = static_cast<uint32_t>(getter_compiler.chunk_.code_size());
+            for (auto& dl : getter_compiler.debug_locals_) {
+                if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+            }
+            auto& primary = getter_compiler.chunk_.ensure_primary_body();
+            primary.debug_info = std::make_unique<DebugInfo>();
+            primary.debug_info->function_name = "get:" + property->name;
+            primary.debug_info->source_file = current_source_file_;
+            primary.debug_info->locals = std::move(getter_compiler.debug_locals_);
+        }
 
         getter_proto.chunk = finalize_function_chunk(std::move(getter_compiler.chunk_));
         record_method_body(stmt.name, getter_proto.name, property->is_static, {}, *getter_proto.chunk);
@@ -5454,6 +5721,8 @@ void Compiler::emit_native_class(const ClassDeclStmt& stmt, const NativeTypeBind
             setter_compiler.recursion_depth_ = 0;
             setter_compiler.current_class_properties_ = &property_lookup;
             setter_compiler.allow_implicit_self_property_ = true;
+            setter_compiler.emit_debug_info_ = emit_debug_info_;
+            setter_compiler.current_source_file_ = current_source_file_;
 
             setter_compiler.declare_local("self", false);
             setter_compiler.mark_local_initialized();
@@ -5467,6 +5736,18 @@ void Compiler::emit_native_class(const ClassDeclStmt& stmt, const NativeTypeBind
             setter_compiler.emit_op(OpCode::OP_GET_LOCAL, property->line);
             setter_compiler.emit_short(1, property->line);  // newValue is at local index 1
             setter_compiler.emit_op(OpCode::OP_RETURN, property->line);
+
+            if (setter_compiler.emit_debug_info_) {
+                uint32_t end_offset = static_cast<uint32_t>(setter_compiler.chunk_.code_size());
+                for (auto& dl : setter_compiler.debug_locals_) {
+                    if (dl.scope_end_offset == 0) dl.scope_end_offset = end_offset;
+                }
+                auto& primary = setter_compiler.chunk_.ensure_primary_body();
+                primary.debug_info = std::make_unique<DebugInfo>();
+                primary.debug_info->function_name = "set:" + property->name;
+                primary.debug_info->source_file = current_source_file_;
+                primary.debug_info->locals = std::move(setter_compiler.debug_locals_);
+            }
 
             setter_proto.chunk = finalize_function_chunk(std::move(setter_compiler.chunk_));
             record_method_body(stmt.name,
